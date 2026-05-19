@@ -1192,11 +1192,22 @@
         // SUB-SISTEM ANTI-CHEAT SECURITY
         // ==========================================================
         function initAntiCheatSystem() {
-            window.addEventListener('blur', () => { triggerCheatSiren("Pindah Layar/Tab Browser"); });
-            document.addEventListener('visibilitychange', () => { if(document.hidden) triggerCheatSiren("Meminimize Aplikasi"); });
+            window.addEventListener('blur', () => { if(isExamActive) triggerCheatSiren("Pindah Layar/Tab Browser"); });
+            document.addEventListener('visibilitychange', () => { if(document.hidden && isExamActive) triggerCheatSiren("Meminimize Aplikasi"); });
             window.addEventListener('resize', () => { if(isExamActive && !document.fullscreenElement) triggerCheatSiren("Keluar Mode Layar Penuh"); });
-            document.addEventListener('contextmenu', e => e.preventDefault());
-            document.addEventListener('keydown', e => { if(e.key === 'F12' || (e.ctrlKey && ['`','c','v','x','i','u','j'].includes(e.key.toLowerCase()))) { e.preventDefault(); triggerCheatSiren("Pintasan Tombol Terlarang"); } });
+            
+            // Perbaikan: Klik kanan hanya diblokir saat ujian aktif
+            document.addEventListener('contextmenu', e => { 
+                if(isExamActive) e.preventDefault(); 
+            });
+            
+            // Perbaikan: Ctrl+V, Ctrl+C, dll HANYA diblokir saat ujian aktif
+            document.addEventListener('keydown', e => { 
+                if(isExamActive && (e.key === 'F12' || (e.ctrlKey && ['`','c','v','x','i','u','j'].includes(e.key.toLowerCase())))) { 
+                    e.preventDefault(); 
+                    triggerCheatSiren("Pintasan Tombol Terlarang"); 
+                } 
+            });
         }
 
         function triggerCheatSiren(reason) {
