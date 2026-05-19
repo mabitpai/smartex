@@ -369,9 +369,11 @@
             if(peran === 'siswa') {
                 payload.Kelas = document.getElementById('reg-kelas').value;
                 db.Tabel_Siswa.push(payload);
+                if(isFirebaseConnected) firestoreDb.collection('users_siswa').doc(email).set(payload);
             } else {
                 payload.ID_Mapel = document.getElementById('reg-mapel').value;
                 db.Tabel_Guru.push(payload);
+                if(isFirebaseConnected) firestoreDb.collection('users_guru').doc(email).set(payload);
             }
 
             saveDatabaseToLocalStorage();
@@ -519,9 +521,17 @@
             if(idx > -1) {
                 if(action === 'Active') {
                     userList[idx].Status = 'Active';
+                    if(isFirebaseConnected) {
+                        if(role==='siswa') firestoreDb.collection('users_siswa').doc(email).update({Status: "Active"});
+                        else firestoreDb.collection('users_guru').doc(email).update({Status: "Active"});
+                    }
                     showCustomSystemDialog("Disetujui", `Akun ${email} berhasil di-approve & diaktifkan.`, "success");
                 } else {
                     userList.splice(idx, 1);
+                    if(isFirebaseConnected) {
+                        if(role==='siswa') firestoreDb.collection('users_siswa').doc(email).delete();
+                        else firestoreDb.collection('users_guru').doc(email).delete();
+                    }
                     showCustomSystemDialog("Ditolak", `Akun ${email} ditolak & dibatalkan dari sistem.`, "warning");
                 }
                 saveDatabaseToLocalStorage();
@@ -642,7 +652,7 @@
 
                 <!-- TABLE BANK SOAL -->
                 <div class="bg-slate-950 rounded-2xl border border-slate-850 shadow-lg overflow-hidden">
-                    <div class="overflow-x-auto"><table class="w-full text-left text-xs"><thead class="bg-slate-900/80 border-b border-slate-850 text-slate-400 font-bold"><tr><th class="p-4 w-12 text-center">ID</th><th class="p-4 w-24">Kategori</th><th class="p-4">Teks Soal & Lampiran Media</th><th class="p-4 w-40">Kunci Jawaban</th></tr></thead>
+                    <div class="overflow-x-auto"><table class="w-full text-left text-xs"><thead class="bg-slate-900/80 border-b border-slate-850 text-slate-400 font-bold"><tr><th class="p-4 w-12 text-center">ID</th><th class="p-4 w-24">Kategori</th><th class="p-4">Teks Soal & Lampiran Media</th><th class="p-4 w-40">Kunci Jawaban</th><th class="p-4 w-16 text-center"><i class="fas fa-cog"></i></th></tr></thead>
                     <tbody id="tbody-soal" class="divide-y divide-slate-850"></tbody></table></div>
                 </div>
             `;
@@ -724,6 +734,7 @@
 
             db.Tabel_Soal.push(payload);
             saveDatabaseToLocalStorage();
+            if(isFirebaseConnected) firestoreDb.collection('soal').doc(payload.ID_Soal).set(payload);
             document.getElementById('wrapper-form-soal').classList.add('hidden');
             triggerFilterSoalDatabase();
             showCustomSystemDialog("Berhasil", "Soal baru berhasil direkam ke bank soal.", "success");
@@ -746,7 +757,7 @@
             });
 
             if(list.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="4" class="p-6 text-center text-slate-500 italic">Tidak ada butir soal kriteria cocok.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-slate-500 italic">Tidak ada butir soal kriteria cocok.</td></tr>`;
                 return;
             }
 
@@ -761,8 +772,18 @@
                             ${mediaTag}
                         </td>
                         <td class="p-4 font-mono text-xs font-bold text-emerald-400 bg-emerald-950/20">${q.Kunci_Jawaban}</td>
+                        <td class="p-4 text-center"><button onclick="deleteSoalAction('${q.ID_Soal}')" class="text-rose-500 hover:text-rose-400 transition p-2"><i class="fas fa-trash"></i></button></td>
                     </tr>
                 `;
+            });
+        }
+
+        function deleteSoalAction(id) {
+            showCustomSystemDialog("Hapus Soal", `Apakah Anda yakin ingin menghapus butir soal dengan ID ${id}?`, "warning", () => {
+                db.Tabel_Soal = db.Tabel_Soal.filter(s => s.ID_Soal !== id);
+                saveDatabaseToLocalStorage();
+                if(isFirebaseConnected) firestoreDb.collection('soal').doc(id).delete();
+                triggerFilterSoalDatabase();
             });
         }
 
@@ -808,16 +829,21 @@
                     if(type === 'soal') {
                         r.ID_Soal = "S" + (db.Tabel_Soal.length+1).toString().padStart(3, '0');
                         db.Tabel_Soal.push(r);
+                        if(isFirebaseConnected) firestoreDb.collection('soal').doc(r.ID_Soal).set(r);
                     } else if(type === 'siswa') {
                         r.Peran = 'siswa';
                         db.Tabel_Siswa.push(r);
+                        if(isFirebaseConnected) firestoreDb.collection('users_siswa').doc(r.Email).set(r);
                     } else if(type === 'guru') {
                         r.Peran = 'guru';
                         db.Tabel_Guru.push(r);
+                        if(isFirebaseConnected) firestoreDb.collection('users_guru').doc(r.Email).set(r);
                     } else if(type === 'kelas') {
                         db.Tabel_Kelas.push(r);
+                        if(isFirebaseConnected) firestoreDb.collection('kelas').doc(r.ID_Kelas).set(r);
                     } else if(type === 'mapel') {
                         db.Tabel_Mapel.push(r);
+                        if(isFirebaseConnected) firestoreDb.collection('mapel').doc(r.ID_Mapel).set(r);
                     }
                 });
                 saveDatabaseToLocalStorage();
@@ -851,8 +877,8 @@
                         </form>
                     </div>
                     <div class="lg:col-span-2 bg-slate-950 rounded-2xl border border-slate-850 overflow-hidden shadow-lg">
-                        <table class="w-full text-left text-xs"><thead class="bg-slate-900 border-b border-slate-850 text-slate-400"><tr><th class="p-3">ID Kode</th><th class="p-3">Nama Mapel</th></tr></thead><tbody class="divide-y divide-slate-850 text-slate-300">
-                            ${db.Tabel_Mapel.map(m=>`<tr><td class="p-3 font-mono font-bold">${m.ID_Mapel}</td><td class="p-3 font-medium">${m.Nama_Mapel}</td></tr>`).join('')}
+                        <table class="w-full text-left text-xs"><thead class="bg-slate-900 border-b border-slate-850 text-slate-400"><tr><th class="p-3">ID Kode</th><th class="p-3">Nama Mapel</th><th class="p-3 w-16 text-center"><i class="fas fa-cog"></i></th></tr></thead><tbody class="divide-y divide-slate-850 text-slate-300">
+                            ${db.Tabel_Mapel.map(m=>`<tr><td class="p-3 font-mono font-bold">${m.ID_Mapel}</td><td class="p-3 font-medium">${m.Nama_Mapel}</td><td class="p-3 text-center"><button onclick="deleteMapelAction('${m.ID_Mapel}')" class="text-rose-500 hover:text-rose-400 transition p-2"><i class="fas fa-trash"></i></button></td></tr>`).join('')}
                         </tbody></table>
                     </div>
                 </div>
@@ -861,7 +887,17 @@
         function handleSaveManualMapel(e) {
             e.preventDefault();
             let payload = { ID_Mapel: document.getElementById('add-mp-id').value, Nama_Mapel: document.getElementById('add-mp-nama').value };
-            db.Tabel_Mapel.push(payload); saveDatabaseToLocalStorage(); renderInitialDropdowns(); viewManageMapelPanel();
+            db.Tabel_Mapel.push(payload); saveDatabaseToLocalStorage(); 
+            if(isFirebaseConnected) firestoreDb.collection('mapel').doc(payload.ID_Mapel).set(payload);
+            renderInitialDropdowns(); viewManageMapelPanel();
+        }
+        function deleteMapelAction(id) {
+            showCustomSystemDialog("Hapus Mapel", `Apakah Anda yakin ingin menghapus Mata Pelajaran ${id}?`, "warning", () => {
+                db.Tabel_Mapel = db.Tabel_Mapel.filter(m => m.ID_Mapel !== id);
+                saveDatabaseToLocalStorage();
+                if(isFirebaseConnected) firestoreDb.collection('mapel').doc(id).delete();
+                renderInitialDropdowns(); viewManageMapelPanel();
+            });
         }
 
         // VIEW: ADMIN - MANAGE KELAS
@@ -880,8 +916,8 @@
                         </form>
                     </div>
                     <div class="lg:col-span-2 bg-slate-950 rounded-2xl border border-slate-850 overflow-hidden shadow-lg">
-                        <table class="w-full text-left text-xs"><thead class="bg-slate-900 border-b border-slate-850 text-slate-400"><tr><th class="p-3">ID Kelas</th></tr></thead><tbody class="divide-y divide-slate-850 text-slate-300">
-                            ${db.Tabel_Kelas.map(k=>`<tr><td class="p-3 font-mono font-bold">${k.ID_Kelas}</td></tr>`).join('')}
+                        <table class="w-full text-left text-xs"><thead class="bg-slate-900 border-b border-slate-850 text-slate-400"><tr><th class="p-3">ID Kelas</th><th class="p-3 w-16 text-center"><i class="fas fa-cog"></i></th></tr></thead><tbody class="divide-y divide-slate-850 text-slate-300">
+                            ${db.Tabel_Kelas.map(k=>`<tr><td class="p-3 font-mono font-bold">${k.ID_Kelas}</td><td class="p-3 text-center"><button onclick="deleteKelasAction('${k.ID_Kelas}')" class="text-rose-500 hover:text-rose-400 transition p-2"><i class="fas fa-trash"></i></button></td></tr>`).join('')}
                         </tbody></table>
                     </div>
                 </div>
@@ -890,7 +926,17 @@
         function handleSaveManualKelas(e) {
             e.preventDefault();
             let payload = { ID_Kelas: document.getElementById('add-kls-id').value, Nama_Kelas: document.getElementById('add-kls-id').value };
-            db.Tabel_Kelas.push(payload); saveDatabaseToLocalStorage(); renderInitialDropdowns(); viewManageKelasPanel();
+            db.Tabel_Kelas.push(payload); saveDatabaseToLocalStorage(); 
+            if(isFirebaseConnected) firestoreDb.collection('kelas').doc(payload.ID_Kelas).set(payload);
+            renderInitialDropdowns(); viewManageKelasPanel();
+        }
+        function deleteKelasAction(id) {
+            showCustomSystemDialog("Hapus Kelas", `Apakah Anda yakin ingin menghapus kelas ${id}?`, "warning", () => {
+                db.Tabel_Kelas = db.Tabel_Kelas.filter(k => k.ID_Kelas !== id);
+                saveDatabaseToLocalStorage();
+                if(isFirebaseConnected) firestoreDb.collection('kelas').doc(id).delete();
+                renderInitialDropdowns(); viewManageKelasPanel();
+            });
         }
 
         // VIEW: ADMIN - MANAGE SISWA (Passwordless Version)
@@ -915,8 +961,8 @@
                         </form>
                     </div>
                     <div class="lg:col-span-2 bg-slate-950 rounded-2xl border border-slate-850 overflow-hidden shadow-lg">
-                        <table class="w-full text-left text-xs"><thead class="bg-slate-900 border-b border-slate-850 text-slate-400"><tr><th class="p-3">Nama Lengkap</th><th class="p-3">Email Login</th><th class="p-3">Kelas</th><th class="p-3 text-center">Status</th></tr></thead><tbody class="divide-y divide-slate-300 text-slate-300">
-                            ${db.Tabel_Siswa.map(s=>`<tr><td class="p-3 font-semibold">${s.Nama}</td><td class="p-3 font-mono text-slate-400">${s.Email}</td><td class="p-3">${s.Kelas}</td><td class="p-3 text-center"><span class="px-2 py-0.5 rounded text-[9px] font-bold ${s.Status==='Active'?'bg-emerald-950 text-emerald-400':'bg-amber-950 text-amber-400'}">${s.Status}</span></td></tr>`).join('')}
+                        <table class="w-full text-left text-xs"><thead class="bg-slate-900 border-b border-slate-850 text-slate-400"><tr><th class="p-3">Nama Lengkap</th><th class="p-3">Email Login</th><th class="p-3">Kelas</th><th class="p-3 text-center">Status</th><th class="p-3 w-16 text-center"><i class="fas fa-cog"></i></th></tr></thead><tbody class="divide-y divide-slate-300 text-slate-300">
+                            ${db.Tabel_Siswa.map(s=>`<tr><td class="p-3 font-semibold">${s.Nama}</td><td class="p-3 font-mono text-slate-400">${s.Email}</td><td class="p-3">${s.Kelas}</td><td class="p-3 text-center"><span class="px-2 py-0.5 rounded text-[9px] font-bold ${s.Status==='Active'?'bg-emerald-950 text-emerald-400':'bg-amber-950 text-amber-400'}">${s.Status}</span></td><td class="p-3 text-center"><button onclick="deleteSiswaAction('${s.Email}')" class="text-rose-500 hover:text-rose-400 transition p-2"><i class="fas fa-trash"></i></button></td></tr>`).join('')}
                         </tbody></table>
                     </div>
                 </div>
@@ -925,7 +971,17 @@
         function handleSaveManualSiswa(e) {
             e.preventDefault();
             let payload = { Email: document.getElementById('add-sw-email').value, Nama: document.getElementById('add-sw-nama').value, Kelas: document.getElementById('add-sw-kls').value, Peran: "siswa", Status: "Active" };
-            db.Tabel_Siswa.push(payload); saveDatabaseToLocalStorage(); viewManageSiswaPanel();
+            db.Tabel_Siswa.push(payload); saveDatabaseToLocalStorage(); 
+            if(isFirebaseConnected) firestoreDb.collection('users_siswa').doc(payload.Email).set(payload);
+            viewManageSiswaPanel();
+        }
+        function deleteSiswaAction(email) {
+            showCustomSystemDialog("Hapus Data Siswa", `Apakah Anda yakin ingin menghapus data murid ${email}?`, "warning", () => {
+                db.Tabel_Siswa = db.Tabel_Siswa.filter(s => s.Email !== email);
+                saveDatabaseToLocalStorage();
+                if(isFirebaseConnected) firestoreDb.collection('users_siswa').doc(email).delete();
+                viewManageSiswaPanel();
+            });
         }
 
         // VIEW: ADMIN - MANAGE GURU (Passwordless Version)
@@ -950,8 +1006,8 @@
                         </form>
                     </div>
                     <div class="lg:col-span-2 bg-slate-950 rounded-2xl border border-slate-850 overflow-hidden shadow-lg">
-                        <table class="w-full text-left text-xs"><thead class="bg-slate-900 border-b border-slate-850 text-slate-400"><tr><th class="p-3">Nama Guru</th><th class="p-3">Email Login</th><th class="p-3">Mapel</th><th class="p-3 text-center">Status</th></tr></thead><tbody class="divide-y divide-slate-850 text-slate-300">
-                            ${db.Tabel_Guru.map(g=>`<tr><td class="p-3 font-semibold text-slate-200">${g.Nama}</td><td class="p-3 font-mono text-slate-400">${g.Email}</td><td class="p-3">${g.ID_Mapel}</td><td class="p-3 text-center"><span class="px-2 py-0.5 rounded text-[9px] font-bold ${g.Status==='Active'?'bg-emerald-950 text-emerald-400':'bg-amber-950 text-amber-400'}">${g.Status}</span></td></tr>`).join('')}
+                        <table class="w-full text-left text-xs"><thead class="bg-slate-900 border-b border-slate-850 text-slate-400"><tr><th class="p-3">Nama Guru</th><th class="p-3">Email Login</th><th class="p-3">Mapel</th><th class="p-3 text-center">Status</th><th class="p-3 w-16 text-center"><i class="fas fa-cog"></i></th></tr></thead><tbody class="divide-y divide-slate-850 text-slate-300">
+                            ${db.Tabel_Guru.map(g=>`<tr><td class="p-3 font-semibold text-slate-200">${g.Nama}</td><td class="p-3 font-mono text-slate-400">${g.Email}</td><td class="p-3">${g.ID_Mapel}</td><td class="p-3 text-center"><span class="px-2 py-0.5 rounded text-[9px] font-bold ${g.Status==='Active'?'bg-emerald-950 text-emerald-400':'bg-amber-950 text-amber-400'}">${g.Status}</span></td><td class="p-3 text-center"><button onclick="deleteGuruAction('${g.Email}')" class="text-rose-500 hover:text-rose-400 transition p-2"><i class="fas fa-trash"></i></button></td></tr>`).join('')}
                         </tbody></table>
                     </div>
                 </div>
@@ -960,7 +1016,17 @@
         function handleSaveManualGuru(e) {
             e.preventDefault();
             let payload = { Email: document.getElementById('add-gr-email').value, Nama: document.getElementById('add-gr-nama').value, ID_Mapel: document.getElementById('add-gr-mp').value, Peran: "guru", Status: "Active" };
-            db.Tabel_Guru.push(payload); saveDatabaseToLocalStorage(); viewManageGuruPanel();
+            db.Tabel_Guru.push(payload); saveDatabaseToLocalStorage(); 
+            if(isFirebaseConnected) firestoreDb.collection('users_guru').doc(payload.Email).set(payload);
+            viewManageGuruPanel();
+        }
+        function deleteGuruAction(email) {
+            showCustomSystemDialog("Hapus Data Guru", `Apakah Anda yakin ingin menghapus data akun guru ${email}?`, "warning", () => {
+                db.Tabel_Guru = db.Tabel_Guru.filter(g => g.Email !== email);
+                saveDatabaseToLocalStorage();
+                if(isFirebaseConnected) firestoreDb.collection('users_guru').doc(email).delete();
+                viewManageGuruPanel();
+            });
         }
 
         // VIEW: ADMIN - MANAGE JADWAL
@@ -982,8 +1048,8 @@
                         </form>
                     </div>
                     <div class="lg:col-span-2 bg-slate-950 rounded-2xl border border-slate-850 overflow-hidden shadow-lg">
-                        <table class="w-full text-left text-xs"><thead class="bg-slate-900 border-b border-slate-850 text-slate-400"><tr><th class="p-3">ID</th><th class="p-3">Mapel / Kelas</th><th class="p-3">Mulai</th><th class="p-3">Durasi</th></tr></thead><tbody class="divide-y divide-slate-850 text-slate-300">
-                            ${db.Tabel_Jadwal.map(j=>`<tr><td class="p-3 font-mono font-bold">${j.ID_Jadwal}</td><td class="p-3 font-semibold">${j.ID_Mapel} (${j.ID_Kelas})</td><td class="p-3 font-mono text-slate-400">${j.Waktu_Mulai}</td><td class="p-3">${j.Durasi_Menit} Menit</td></tr>`).join('')}
+                        <table class="w-full text-left text-xs"><thead class="bg-slate-900 border-b border-slate-850 text-slate-400"><tr><th class="p-3">ID</th><th class="p-3">Mapel / Kelas</th><th class="p-3">Mulai</th><th class="p-3">Durasi</th><th class="p-3 w-16 text-center"><i class="fas fa-cog"></i></th></tr></thead><tbody class="divide-y divide-slate-850 text-slate-300">
+                            ${db.Tabel_Jadwal.map(j=>`<tr><td class="p-3 font-mono font-bold">${j.ID_Jadwal}</td><td class="p-3 font-semibold">${j.ID_Mapel} <br><span class="text-slate-500 font-normal">${j.ID_Kelas}</span></td><td class="p-3 font-mono text-slate-400">${j.Waktu_Mulai}</td><td class="p-3">${j.Durasi_Menit} Menit</td><td class="p-3 text-center"><button onclick="deleteJadwalAction('${j.ID_Jadwal}')" class="text-rose-500 hover:text-rose-400 transition p-2"><i class="fas fa-trash"></i></button></td></tr>`).join('')}
                         </tbody></table>
                     </div>
                 </div>
@@ -992,7 +1058,17 @@
         function handleSaveManualJadwal(e) {
             e.preventDefault();
             let payload = { ID_Jadwal: document.getElementById('add-jd-id').value, ID_Mapel: document.getElementById('add-jd-mp').value, ID_Kelas: document.getElementById('add-jd-kls').value, Waktu_Mulai: document.getElementById('add-jd-waktu').value, Durasi_Menit: parseInt(document.getElementById('add-jd-durasi').value), Status: "Aktif" };
-            db.Tabel_Jadwal.push(payload); saveDatabaseToLocalStorage(); viewManageJadwalPanel();
+            db.Tabel_Jadwal.push(payload); saveDatabaseToLocalStorage(); 
+            if(isFirebaseConnected) firestoreDb.collection('jadwal').doc(payload.ID_Jadwal).set(payload);
+            viewManageJadwalPanel();
+        }
+        function deleteJadwalAction(id) {
+            showCustomSystemDialog("Hapus Jadwal", `Apakah Anda yakin ingin mematikan rilis jadwal sesi ${id}?`, "warning", () => {
+                db.Tabel_Jadwal = db.Tabel_Jadwal.filter(j => j.ID_Jadwal !== id);
+                saveDatabaseToLocalStorage();
+                if(isFirebaseConnected) firestoreDb.collection('jadwal').doc(id).delete();
+                viewManageJadwalPanel();
+            });
         }
 
         // VIEW: REKAP NILAI (EXCEL & PDF INTEGRATED)
@@ -1335,6 +1411,7 @@
 
             db.Tabel_Hasil.push(payload);
             saveDatabaseToLocalStorage();
+            if(isFirebaseConnected) firestoreDb.collection('hasil').doc(payload.ID_Hasil).set(payload);
 
             let canvas = document.getElementById('stu-content');
             canvas.innerHTML = `
