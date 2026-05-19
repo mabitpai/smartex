@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Smart Exambro Anti-Curang v3.5 - Firebase Passwordless Edition</title>
+    <title>SMARTEX CBT v4.0 - Firebase Pro Edition</title>
     
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -96,7 +96,7 @@
                     <i class="fas fa-shield-halved text-2xl text-teal-400"></i>
                 </div>
                 <h1 class="text-xl font-bold tracking-tight text-white uppercase">SMARTEX</h1>
-                <p class="text-xs text-teal-400 mt-1 tracking-wider uppercase font-semibold">Sistem Ujian Online Terintegrasi</p>
+                <p class="text-xs text-teal-400 mt-1 tracking-wider uppercase font-semibold">Computer Based Test System</p>
             </div>
 
             <!-- CONTAINER BOX LOGIN -->
@@ -160,7 +160,7 @@
         <!-- Sidebar Navigation -->
         <aside class="w-full md:w-64 bg-slate-950 text-slate-300 flex flex-col shadow-2xl border-r border-slate-800/80 flex-shrink-0 z-20">
             <div class="p-5 border-b border-slate-800 flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-teal-premium flex items-center justify-center text-white font-bold text-xl border border-gold-premium shadow-inner">FB</div>
+                <div class="w-10 h-10 rounded-xl bg-teal-premium flex items-center justify-center text-white font-bold text-xl border border-gold-premium shadow-inner">SX</div>
                 <div>
                     <h2 class="font-bold text-white text-sm truncate max-w-[140px]" id="dash-user-name">Pengguna</h2>
                     <span class="text-[10px] uppercase tracking-widest text-gold-premium font-semibold" id="dash-user-role">Role</span>
@@ -255,6 +255,16 @@
             autoInitializeFirebaseConfig();
             renderInitialDropdowns();
             toggleRegAttributePanel();
+            
+            // Check session login (Auto Login Priority)
+            let savedSession = localStorage.getItem('smartex_auth_session');
+            if(savedSession) {
+                try {
+                    let s = JSON.parse(savedSession);
+                    document.getElementById('login-email').value = s.Email;
+                    handleAuthLoginFlow(new Event('submit'));
+                } catch(e){}
+            }
         };
 
         function initDatabaseFromLocalStorage() {
@@ -309,63 +319,47 @@
             }
         }
 
-        // INTELLIGENT SINGLE LOG LOGIN FLOW (Cascading search mechanism - Passwordless Email Only)
         function handleAuthLoginFlow(e) {
-            e.preventDefault();
+            if(e) e.preventDefault();
             let email = document.getElementById('login-email').value.trim();
 
-            // 1. Check Master Admin Credentials
             if(email === masterAdmin.Email) {
                 currentUser = masterAdmin;
-                showScreen('dashboard');
-                buildDashboardRouterMenu();
-                return;
+                localStorage.setItem('smartex_auth_session', JSON.stringify(currentUser));
+                showScreen('dashboard'); buildDashboardRouterMenu(); return;
             }
 
-            // 2. Check Teacher credentials
             let t = db.Tabel_Guru.find(g => g.Email === email);
             if(t) {
-                if(t.Status === 'Pending') {
-                    showCustomSystemDialog("Akses Ditangguhkan", "Akun Guru Anda masih berstatus PENDING. Tunggu otorisasi persetujuan Admin.", "warning");
-                    return;
-                }
+                if(t.Status === 'Pending') { showCustomSystemDialog("Akses Ditangguhkan", "Akun Guru masih PENDING persetujuan Admin.", "warning"); return; }
                 currentUser = t;
-                showScreen('dashboard');
-                buildDashboardRouterMenu();
-                return;
+                localStorage.setItem('smartex_auth_session', JSON.stringify(currentUser));
+                showScreen('dashboard'); buildDashboardRouterMenu(); return;
             }
 
-            // 3. Check Student credentials
             let s = db.Tabel_Siswa.find(x => x.Email === email);
             if(s) {
-                if(s.Status === 'Pending') {
-                    showCustomSystemDialog("Akses Ditangguhkan", "Akun Siswa Anda belum disetujui (Approved) oleh Admin Sekolah.", "warning");
-                    return;
-                }
+                if(s.Status === 'Pending') { showCustomSystemDialog("Akses Ditangguhkan", "Akun Siswa belum di-Approve oleh Admin.", "warning"); return; }
                 currentUser = s;
-                showScreen('siswa');
-                renderStudentLandingArea();
-                return;
+                localStorage.setItem('smartex_auth_session', JSON.stringify(currentUser));
+                showScreen('siswa'); renderStudentLandingArea(); return;
             }
 
-            showCustomSystemDialog("Autentikasi Gagal", "Alamat email tidak ditemukan dalam sistem database.", "error");
+            showCustomSystemDialog("Autentikasi Gagal", "Alamat email tidak terdaftar.", "error");
         }
 
-        // REGISTER PROCESS: AUTO ASSIGN TO PENDING ACCORDING TO SYSTEM SPECS (Passwordless)
         function handleAuthRegisterFlow(e) {
             e.preventDefault();
             let email = document.getElementById('reg-email').value.trim();
             let nama = document.getElementById('reg-nama').value.trim();
             let peran = document.getElementById('reg-peran').value;
 
-            // Duplicate checker
             if(db.Tabel_Siswa.some(x => x.Email===email) || db.Tabel_Guru.some(x => x.Email===email) || email===masterAdmin.Email) {
                 showCustomSystemDialog("Pendaftaran Gagal", "Alamat email bersangkutan sudah terdaftar.", "error");
                 return;
             }
 
             let payload = { Email: email, Nama: nama, Peran: peran, Status: "Pending", Timestamp: new Date().toLocaleDateString('id-ID') };
-            
             if(peran === 'siswa') {
                 payload.Kelas = document.getElementById('reg-kelas').value;
                 db.Tabel_Siswa.push(payload);
@@ -377,16 +371,16 @@
             }
 
             saveDatabaseToLocalStorage();
-            showCustomSystemDialog("Daftar Berhasil", "Registrasi akun mandiri berhasil diajukan! Akun Anda terkunci berstatus PENDING hingga disetujui Admin.", "success", () => {
-                toggleAuthViewport('login');
-            });
+            showCustomSystemDialog("Daftar Berhasil", "Registrasi akun diajukan! Status PENDING menunggu persetujuan Admin.", "success", () => toggleAuthViewport('login'));
         }
 
         function handleLogout() {
+            if(isExamActive) {
+                showCustomSystemDialog("Aksi Ditolak", "Anda tidak dapat keluar di tengah ujian!", "warning"); return;
+            }
             currentUser = null;
-            isExamActive = false;
-            clearInterval(examTimerInterval);
-            if(document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+            localStorage.removeItem('smartex_auth_session');
+            document.getElementById('login-email').value = '';
             showScreen('auth');
         }
 
@@ -413,6 +407,7 @@
                     { id: 'ad-kelas', name: 'Manajemen Kelas', icon: 'fa-school-flag', action: viewManageKelasPanel },
                     { id: 'ad-siswa', name: 'Data Master Siswa', icon: 'fa-users', action: viewManageSiswaPanel },
                     { id: 'ad-guru', name: 'Data Master Guru', icon: 'fa-user-tie', action: viewManageGuruPanel },
+                    { id: 'ad-soal', name: 'Bank Soal Ujian', icon: 'fa-folder-open', action: viewManageSoalPanel },
                     { id: 'ad-jadwal', name: 'Jadwal Ujian Rilis', icon: 'fa-calendar-days', action: viewManageJadwalPanel },
                     { id: 'ad-rekap', name: 'Laporan Rekap Nilai', icon: 'fa-file-invoice', action: viewRekapNilaiPanel },
                     { id: 'ad-config', name: 'Konfigurator Firebase', icon: 'fa-database', action: viewFirebaseSetupPanel }
@@ -438,7 +433,6 @@
             nav.firstChild.click();
         }
 
-        // VIEW: ADMIN GRAPH STATS
         function viewAdminVisualStats() {
             let canvas = document.getElementById('dash-content');
             canvas.innerHTML = `
@@ -461,24 +455,9 @@
                         <div class="p-2.5 bg-indigo-950/50 text-indigo-400 rounded-lg"><i class="fas fa-poll text-sm"></i></div>
                     </div>
                 </div>
-                <div class="bg-slate-950 p-5 rounded-2xl border border-slate-850 max-w-md"><h4 class="text-xs font-bold text-slate-400 mb-4 uppercase">Distribusi Volume Data</h4><canvas id="statChart" class="w-full h-44"></canvas></div>
             `;
-            let ctx = document.getElementById('statChart').getContext('2d');
-            new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: ['Siswa', 'Soal', 'Jadwal', 'Hasil'],
-                    datasets: [{
-                        label: 'Kuantitas',
-                        data: [db.Tabel_Siswa.length, db.Tabel_Soal.length, db.Tabel_Jadwal.length, db.Tabel_Hasil.length],
-                        backgroundColor: ['#008080', '#D4AF37', '#10b981', '#6366f1']
-                    }]
-                },
-                options: { plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8' } }, x: { ticks: { color: '#94a3b8' } } } }
-            });
         }
 
-        // VIEW: ADMIN APPROVAL WORKFLOW
         function viewApprovalWorkflowArea() {
             let canvas = document.getElementById('dash-content');
             let pendingStudents = db.Tabel_Siswa.filter(x => x.Status === "Pending");
@@ -532,14 +511,13 @@
                         if(role==='siswa') firestoreDb.collection('users_siswa').doc(email).delete();
                         else firestoreDb.collection('users_guru').doc(email).delete();
                     }
-                    showCustomSystemDialog("Ditolak", `Akun ${email} ditolak & dibatalkan dari sistem.`, "warning");
+                    showCustomSystemDialog("Ditolak", `Akun ${email} ditolak & dibatalkan.`, "warning");
                 }
                 saveDatabaseToLocalStorage();
                 viewApprovalWorkflowArea();
             }
         }
 
-        // VIEW: ADMIN FIREBASE INTEGRATION SETUP
         function viewFirebaseSetupPanel() {
             let canvas = document.getElementById('dash-content');
             let savedConfig = localStorage.getItem('fb_config_json') || '';
@@ -556,18 +534,10 @@
         function saveFirebaseSetupConfig() {
             let raw = document.getElementById('fb-config-raw').value.trim();
             if(!raw) { showCustomSystemDialog("Input Kosong", "Pastikan menyalin isian JSON SDK Config Firebase Anda.", "warning"); return; }
-            try {
-                JSON.parse(raw);
-                localStorage.setItem('fb_config_json', raw);
-                showCustomSystemDialog("Config Disimpan", "Config tersimpan di LocalStorage. Melakukan reload sistem...", "success", () => {
-                    window.location.reload();
-                });
-            } catch(e) {
-                showCustomSystemDialog("JSON Invalid", "String masukan bukan merupakan objek JSON valid.", "error");
-            }
+            try { JSON.parse(raw); localStorage.setItem('fb_config_json', raw); showCustomSystemDialog("Config Disimpan", "Melakukan reload sistem...", "success", () => window.location.reload()); } 
+            catch(e) { showCustomSystemDialog("JSON Invalid", "String masukan bukan merupakan objek JSON valid.", "error"); }
         }
 
-        // VIEW: GURU / ADMIN - BANK SOAL MULTIMEDIA (5 OPSI) DENGAN TEMPLATE IMPOR EXCEL & FILTER TRIPLE
         function viewManageSoalPanel() {
             let canvas = document.getElementById('dash-content');
             let mapelOpts = db.Tabel_Mapel.map(m => `<option value="${m.ID_Mapel}">${m.Nama_Mapel}</option>`).join('');
@@ -575,71 +545,36 @@
             canvas.innerHTML = `
                 <div class="mb-5 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
                     <div>
-                        <h1 class="text-xl font-bold text-white">Bank Soal Multimedia (5 Opsi)</h1>
-                        <p class="text-xs text-slate-400">Filter, edit, dan tambah soal multimedia dengan 5 pilihan opsi (A-E) atau unggah format Excel.</p>
+                        <h1 class="text-xl font-bold text-white">Bank Soal Multimedia</h1>
+                        <p class="text-xs text-slate-400">Filter, edit, dan tambah soal dengan input interaktif atau unggah massal Excel.</p>
                     </div>
                     <div class="flex flex-wrap items-center gap-2">
-                        <button onclick="downloadTemplateExcel('soal')" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold"><i class="fas fa-download mr-1.5"></i>Template Excel</button>
+                        <button onclick="downloadTemplateExcel('soal')" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold"><i class="fas fa-download mr-1.5"></i>Template</button>
                         <label class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer flex items-center gap-2 shadow-md">
-                            <i class="fas fa-file-excel"></i> Impor Soal Massal
+                            <i class="fas fa-file-excel"></i> Impor Massal
                             <input type="file" accept=".xlsx" class="hidden" onchange="handleExcelImportFlow(event, 'soal')">
                         </label>
                         <button onclick="toggleFormSoalAccordion()" class="px-4 py-2 bg-teal-premium hover:bg-teal-700 text-white text-xs font-bold rounded-xl shadow-md uppercase tracking-wider"><i class="fas fa-plus mr-1"></i>Buat Soal Manual</button>
                     </div>
                 </div>
 
-                <!-- TRIPLE FILTER BOARD -->
                 <div class="bg-slate-950 p-4 rounded-2xl border border-slate-850 shadow-lg grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
-                    <div>
-                        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">Mata Pelajaran</label>
-                        <select id="flt-s-mapel" onchange="triggerFilterSoalDatabase()" class="w-full p-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 outline-none"><option value="">Semua Mapel</option>${db.Tabel_Mapel.map(m=>`<option value="${m.ID_Mapel}">${m.Nama_Mapel}</option>`).join('')}</select>
-                    </div>
-                    <div>
-                        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">Tipe Soal</label>
-                        <select id="flt-s-tipe" onchange="triggerFilterSoalDatabase()" class="w-full p-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 outline-none"><option value="">Semua Tipe</option><option value="PG">Pilihan Ganda</option><option value="PG_KOMPLEKS">PG Kompleks</option><option value="BENAR_SALAH">Benar-Salah</option><option value="URUTAN">Urutan</option><option value="JODOH">Menjodohkan</option><option value="URAIAN_SINGKAT">Uraian Singkat</option><option value="RUMPANG">Kalimat Rumpang</option><option value="ESAI">Esai</option></select>
-                    </div>
-                    <div class="sm:col-span-2">
-                        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">Pencarian Kata Kunci Soal</label>
-                        <input type="text" id="flt-s-keyword" oninput="triggerFilterSoalDatabase()" placeholder="Ketik kata kunci isi pertanyaan..." class="w-full p-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 outline-none focus:border-teal-500">
-                    </div>
+                    <div><label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">Mata Pelajaran</label><select id="flt-s-mapel" onchange="triggerFilterSoalDatabase()" class="w-full p-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 outline-none"><option value="">Semua Mapel</option>${db.Tabel_Mapel.map(m=>`<option value="${m.ID_Mapel}">${m.Nama_Mapel}</option>`).join('')}</select></div>
+                    <div><label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">Tipe Soal</label><select id="flt-s-tipe" onchange="triggerFilterSoalDatabase()" class="w-full p-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 outline-none"><option value="">Semua Tipe</option><option value="PG">Pilihan Ganda</option><option value="PG_KOMPLEKS">PG Kompleks</option><option value="BENAR_SALAH">Benar-Salah</option><option value="URUTAN">Urutan</option><option value="JODOH">Menjodohkan</option><option value="URAIAN_SINGKAT">Uraian Singkat</option><option value="RUMPANG">Kalimat Rumpang</option><option value="ESAI">Esai</option></select></div>
+                    <div class="sm:col-span-2"><label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">Pencarian Soal</label><input type="text" id="flt-s-keyword" oninput="triggerFilterSoalDatabase()" placeholder="Ketik kata kunci pertanyaan..." class="w-full p-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 outline-none focus:border-teal-500"></div>
                 </div>
 
-                <!-- FORM PEMBUATAN SOAL INTERAKTIF (MANUAL INPUT) -->
                 <div id="wrapper-form-soal" class="hidden bg-slate-950 p-6 rounded-2xl border border-slate-850 shadow-xl mb-6">
                     <h3 class="font-bold text-slate-100 text-sm mb-4 border-b border-slate-800 pb-2"><i class="fas fa-edit text-teal-400 mr-1.5"></i>Form Pembuatan Butir Soal Baru</h3>
                     <form onsubmit="handleSaveManualSoalFlow(event)" class="space-y-4">
                         <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <div>
-                                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Mata Pelajaran</label>
-                                <select id="form-s-mapel" class="w-full p-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 outline-none" required>${mapelOpts}</select>
-                            </div>
-                            <div>
-                                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Tipe Butir Soal</label>
-                                <select id="form-s-tipe" onchange="adjustFormOpsiFieldsDynamic()" class="w-full p-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-teal-400 outline-none" required>
-                                    <option value="PG">Pilihan Ganda (Single - 5 Opsi)</option>
-                                    <option value="PG_KOMPLEKS">Pilihan Ganda Kompleks (Multi - 5 Opsi)</option>
-                                    <option value="BENAR_SALAH">Benar / Salah (Boolean Switch)</option>
-                                    <option value="URUTAN">Mengurutkan Item</option>
-                                    <option value="JODOH">Menjodohkan Hubungan</option>
-                                    <option value="URAIAN_SINGKAT">Uraian Singkat (Maks 3 Kata)</option>
-                                    <option value="RUMPANG">Melengkapi Kalimat Rumpang</option>
-                                    <option value="ESAI">Uraian Panjang (Esai Mandiri)</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Penyematan Media Pendukung</label>
-                                <select id="form-s-mediatype" class="w-full p-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 outline-none"><option value="none">Tanpa Media</option><option value="gambar">Gambar (URL Link)</option><option value="video">Video (YouTube Link)</option></select>
-                            </div>
-                            <div>
-                                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Tautan URL Media</label>
-                                <input type="text" id="form-s-mediaurl" class="w-full p-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 outline-none" placeholder="Salin tautan gambar/video">
-                            </div>
+                            <div><label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Mata Pelajaran</label><select id="form-s-mapel" class="w-full p-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 outline-none" required>${mapelOpts}</select></div>
+                            <div><label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Tipe Butir Soal</label><select id="form-s-tipe" onchange="adjustFormOpsiFieldsDynamic()" class="w-full p-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-teal-400 outline-none" required><option value="PG">Pilihan Ganda (Single - 5 Opsi)</option><option value="PG_KOMPLEKS">Pilihan Ganda Kompleks (Multi - 5 Opsi)</option><option value="BENAR_SALAH">Benar / Salah (Boolean Switch)</option><option value="URUTAN">Mengurutkan Item</option><option value="JODOH">Menjodohkan Hubungan</option><option value="URAIAN_SINGKAT">Uraian Singkat (Maks 3 Kata)</option><option value="RUMPANG">Melengkapi Kalimat Rumpang</option><option value="ESAI">Uraian Panjang (Esai Mandiri)</option></select></div>
+                            <div><label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Penyematan Media</label><select id="form-s-mediatype" class="w-full p-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 outline-none"><option value="none">Tanpa Media</option><option value="gambar">Gambar (URL Link)</option><option value="video">Video (YouTube Link)</option></select></div>
+                            <div><label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Tautan URL Media</label><input type="text" id="form-s-mediaurl" class="w-full p-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 outline-none" placeholder="Salin tautan media"></div>
                         </div>
 
-                        <div>
-                            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Rumusan Teks Kalimat Pertanyaan</label>
-                            <textarea id="form-s-teks" required rows="3" class="w-full p-3 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 outline-none focus:border-teal-500" placeholder="Ketik narasi rumusan soal ujian..."></textarea>
-                        </div>
+                        <div><label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Rumusan Pertanyaan</label><textarea id="form-s-teks" required rows="3" class="w-full p-3 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 outline-none focus:border-teal-500" placeholder="Ketik narasi rumusan soal..."></textarea></div>
 
                         <div id="dynamic-fields-opsi" class="p-4 bg-slate-900 rounded-xl border border-dashed border-slate-800"></div>
 
@@ -650,7 +585,6 @@
                     </form>
                 </div>
 
-                <!-- TABLE BANK SOAL -->
                 <div class="bg-slate-950 rounded-2xl border border-slate-850 shadow-lg overflow-hidden">
                     <div class="overflow-x-auto"><table class="w-full text-left text-xs"><thead class="bg-slate-900/80 border-b border-slate-850 text-slate-400 font-bold"><tr><th class="p-4 w-12 text-center">ID</th><th class="p-4 w-24">Kategori</th><th class="p-4">Teks Soal & Lampiran Media</th><th class="p-4 w-40">Kunci Jawaban</th><th class="p-4 w-16 text-center"><i class="fas fa-cog"></i></th></tr></thead>
                     <tbody id="tbody-soal" class="divide-y divide-slate-850"></tbody></table></div>
@@ -661,12 +595,8 @@
 
         function toggleFormSoalAccordion() {
             let box = document.getElementById('wrapper-form-soal');
-            if(box.classList.contains('hidden')) {
-                box.classList.remove('hidden');
-                adjustFormOpsiFieldsDynamic();
-            } else {
-                box.classList.add('hidden');
-            }
+            if(box.classList.contains('hidden')) { box.classList.remove('hidden'); adjustFormOpsiFieldsDynamic(); } 
+            else { box.classList.add('hidden'); }
         }
 
         function adjustFormOpsiFieldsDynamic() {
@@ -675,51 +605,52 @@
             container.innerHTML = '';
 
             if(tipe === 'PG' || tipe === 'PG_KOMPLEKS') {
+                let isMulti = tipe === 'PG_KOMPLEKS';
                 container.innerHTML = `
-                    <p class="text-[10px] font-bold text-slate-400 mb-3 uppercase tracking-wider">Mata Rantai Jawaban 5 Opsi (Wajib Pisahkan Dengan Tanda Karakter Pipa | )</p>
-                    <input type="text" id="form-opsi-raw" required class="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 mb-3" value="A. Pilihan Opsi A|B. Pilihan Opsi B|C. Pilihan Opsi C|D. Pilihan Opsi D|E. Pilihan Opsi E">
-                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Kunci Jawaban Benar (Gunakan Huruf Saja, Kompleks Pisahkan Dengan Koma, Contoh: A,C)</label>
-                    <input type="text" id="form-kunci-raw" required class="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200" placeholder="A">
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-3">Tulis Opsi Jawaban & Centang Kunci Benar</label>
+                    <div class="space-y-2">
+                        ${['A','B','C','D','E'].map(lbl => `
+                            <div class="flex items-center gap-3">
+                                <span class="font-bold text-slate-500 w-4">${lbl}.</span>
+                                <input type="text" id="opt-raw-${lbl}" required class="flex-1 p-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 outline-none focus:border-teal-500" placeholder="Ketik teks opsi ${lbl}">
+                                <div class="bg-slate-950 p-2 rounded-xl border border-slate-800 flex items-center justify-center">
+                                    <input type="${isMulti ? 'checkbox' : 'radio'}" name="key-raw" value="${lbl}" class="w-4 h-4 text-teal-500 cursor-pointer" ${!isMulti && lbl==='A' ? 'checked':''}>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
                 `;
             } else if(tipe === 'BENAR_SALAH') {
-                container.innerHTML = `
-                    <input type="hidden" id="form-opsi-raw" value="Benar|Salah">
-                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Kunci Kebenaran Logis</label>
-                    <select id="form-kunci-raw" class="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 outline-none"><option value="Benar">Benar</option><option value="Salah">Salah</option></select>
-                `;
+                container.innerHTML = `<input type="hidden" id="form-opsi-raw" value="Benar|Salah"><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Kunci Kebenaran Logis</label><select id="form-kunci-raw" class="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 outline-none"><option value="Benar">Benar</option><option value="Salah">Salah</option></select>`;
             } else if(tipe === 'URUTAN') {
-                container.innerHTML = `
-                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Tulis Urutan Item Benar Dari Atas Ke Bawah (Pisahkan dengan karakter pipa | )</label>
-                    <input type="text" id="form-opsi-raw" required class="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200" value="Tahap Pertama|Tahap Kedua|Tahap Ketiga">
-                    <input type="hidden" id="form-kunci-raw" value="AUTO_ORDER">
-                `;
+                container.innerHTML = `<label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Tulis Urutan Item Benar (Pisahkan dengan | )</label><input type="text" id="form-opsi-raw" required class="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200" value="Tahap Pertama|Tahap Kedua|Tahap Ketiga"><input type="hidden" id="form-kunci-raw" value="AUTO_ORDER">`;
             } else if(tipe === 'JODOH') {
-                container.innerHTML = `
-                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Pasangan Menjodohkan format Kiri:Kanan (Pisahkan dengan Koma, Contoh: Monitor:Output,Mouse:Input)</label>
-                    <input type="text" id="form-opsi-raw" required class="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200" value="Sapi:Herbivora,Singa:Karnivora,Ayam:Omnivora">
-                    <input type="hidden" id="form-kunci-raw" value="AUTO_MATCH">
-                `;
+                container.innerHTML = `<label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Pasangan Menjodohkan (Contoh: Sapi:Herbivora,Singa:Karnivora)</label><input type="text" id="form-opsi-raw" required class="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200" value="Sapi:Herbivora,Singa:Karnivora"><input type="hidden" id="form-kunci-raw" value="AUTO_MATCH">`;
             } else if(tipe === 'URAIAN_SINGKAT' || tipe === 'RUMPANG') {
-                container.innerHTML = `
-                    <input type="hidden" id="form-opsi-raw" value="">
-                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Teks Kunci Jawaban (Maksimal Batas 3 Kata Kalimat)</label>
-                    <input type="text" id="form-kunci-raw" required class="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200" placeholder="Ketik Kunci Jawaban Akurat">
-                `;
+                container.innerHTML = `<input type="hidden" id="form-opsi-raw" value=""><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Teks Kunci Jawaban (Maks 3 Kata)</label><input type="text" id="form-kunci-raw" required class="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200" placeholder="Ketik Kunci Jawaban Akurat">`;
             } else if(tipe === 'ESAI') {
-                container.innerHTML = `
-                    <input type="hidden" id="form-opsi-raw" value="">
-                    <input type="hidden" id="form-kunci-raw" value="Koreksi Manual Guru">
-                    <p class="text-xs text-slate-500 italic">Esai tidak divalidasi kunci otomatis (Koreksi manual guru).</p>
-                `;
+                container.innerHTML = `<input type="hidden" id="form-opsi-raw" value=""><input type="hidden" id="form-kunci-raw" value="Koreksi Manual"><p class="text-xs text-slate-500 italic">Esai tidak divalidasi kunci otomatis (Koreksi manual guru).</p>`;
             }
         }
 
         function handleSaveManualSoalFlow(e) {
             e.preventDefault();
             let tipe = document.getElementById('form-s-tipe').value;
-            let opsi = document.getElementById('form-opsi-raw').value;
-            let kunci = document.getElementById('form-kunci-raw').value;
-            if(tipe === 'URUTAN' || tipe === 'JODOH') kunci = opsi;
+            let opsi, kunci;
+
+            if(tipe === 'PG' || tipe === 'PG_KOMPLEKS') {
+                let arr = [];
+                ['A','B','C','D','E'].forEach(lbl => arr.push(lbl + '. ' + document.getElementById('opt-raw-'+lbl).value.trim()));
+                opsi = arr.join('|');
+                
+                let keys = Array.from(document.querySelectorAll('input[name="key-raw"]:checked')).map(el => el.value);
+                if(keys.length === 0) { showCustomSystemDialog("Validasi", "Minimal 1 kunci jawaban harus dicentang.", "warning"); return; }
+                kunci = keys.join(',');
+            } else {
+                opsi = document.getElementById('form-opsi-raw').value;
+                kunci = document.getElementById('form-kunci-raw').value;
+                if(tipe === 'URUTAN' || tipe === 'JODOH') kunci = opsi;
+            }
 
             let payload = {
                 ID_Soal: "S" + (db.Tabel_Soal.length+1).toString().padStart(3, '0'),
@@ -732,140 +663,88 @@
                 Kunci_Jawaban: kunci
             };
 
-            db.Tabel_Soal.push(payload);
-            saveDatabaseToLocalStorage();
+            db.Tabel_Soal.push(payload); saveDatabaseToLocalStorage();
             if(isFirebaseConnected) firestoreDb.collection('soal').doc(payload.ID_Soal).set(payload);
+            
             document.getElementById('wrapper-form-soal').classList.add('hidden');
             triggerFilterSoalDatabase();
             showCustomSystemDialog("Berhasil", "Soal baru berhasil direkam ke bank soal.", "success");
         }
 
         function triggerFilterSoalDatabase() {
-            let tbody = document.getElementById('tbody-soal');
-            if(!tbody) return;
-            tbody.innerHTML = '';
-
+            let tbody = document.getElementById('tbody-soal'); if(!tbody) return;
             let fMapel = document.getElementById('flt-s-mapel').value;
             let fTipe = document.getElementById('flt-s-tipe').value;
             let fKeyword = document.getElementById('flt-s-keyword').value.toLowerCase();
 
-            let list = db.Tabel_Soal.filter(q => {
-                let m1 = fMapel === "" ? true : q.ID_Mapel === fMapel;
-                let m2 = fTipe === "" ? true : q.Tipe_Soal === fTipe;
-                let m3 = fKeyword === "" ? true : q.Teks_Soal.toLowerCase().includes(fKeyword);
-                return m1 && m2 && m3;
-            });
+            let list = db.Tabel_Soal.filter(q => (fMapel===""||q.ID_Mapel===fMapel) && (fTipe===""||q.Tipe_Soal===fTipe) && (fKeyword===""||q.Teks_Soal.toLowerCase().includes(fKeyword)));
 
-            if(list.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-slate-500 italic">Tidak ada butir soal kriteria cocok.</td></tr>`;
-                return;
-            }
+            if(list.length === 0) { tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-slate-500 italic">Tidak ada butir soal kriteria cocok.</td></tr>`; return; }
 
-            list.forEach(q => {
+            tbody.innerHTML = list.map(q => {
                 let mediaTag = q.URL_Media ? `<div class="mt-1 text-[10px] text-blue-400 font-mono font-medium truncate max-w-sm"><i class="fas fa-link mr-1"></i>[${q.Tipe_Media.toUpperCase()}] ${q.URL_Media}</div>` : '';
-                tbody.innerHTML += `
+                return `
                     <tr class="hover:bg-slate-900 transition text-slate-300">
                         <td class="p-4 font-mono font-bold text-slate-500 text-center">${q.ID_Soal}</td>
                         <td class="p-4"><span class="px-2 py-0.5 bg-slate-900 border border-slate-800 text-slate-300 font-bold rounded text-[9px] uppercase tracking-wider">${q.Tipe_Soal}</span></td>
-                        <td class="p-4 text-xs font-medium text-slate-200">
-                            <div class="line-clamp-2">${q.Teks_Soal}</div>
-                            ${mediaTag}
-                        </td>
+                        <td class="p-4 text-xs font-medium text-slate-200"><div class="line-clamp-2">${q.Teks_Soal}</div>${mediaTag}</td>
                         <td class="p-4 font-mono text-xs font-bold text-emerald-400 bg-emerald-950/20">${q.Kunci_Jawaban}</td>
                         <td class="p-4 text-center"><button onclick="deleteSoalAction('${q.ID_Soal}')" class="text-rose-500 hover:text-rose-400 transition p-2"><i class="fas fa-trash"></i></button></td>
                     </tr>
                 `;
-            });
+            }).join('');
         }
 
         function deleteSoalAction(id) {
-            showCustomSystemDialog("Hapus Soal", `Apakah Anda yakin ingin menghapus butir soal dengan ID ${id}?`, "warning", () => {
-                db.Tabel_Soal = db.Tabel_Soal.filter(s => s.ID_Soal !== id);
-                saveDatabaseToLocalStorage();
+            showCustomSystemDialog("Hapus Soal", `Menghapus butir soal dengan ID ${id}?`, "warning", () => {
+                db.Tabel_Soal = db.Tabel_Soal.filter(s => s.ID_Soal !== id); saveDatabaseToLocalStorage();
                 if(isFirebaseConnected) firestoreDb.collection('soal').doc(id).delete();
                 triggerFilterSoalDatabase();
             });
         }
 
-        // EXCEL BULK EXPORTER & IMPORTER UTILS (Passwordless Adjustments)
         function downloadTemplateExcel(type) {
             let data = [];
-            if(type === 'soal') {
-                data = [
-                    ["ID_Soal", "ID_Mapel", "Tipe_Soal", "Teks_Soal", "Tipe_Media", "URL_Media", "Opsi_Jawaban", "Kunci_Jawaban"],
-                    ["S-AUTO", "M-01", "PG", "Contoh teks pertanyaan?", "none", "", "A. Opsi A|B. Opsi B|C. Opsi C|D. Opsi D|E. Opsi E", "A"]
-                ];
-            } else if(type === 'siswa') {
-                data = [
-                    ["Email", "Nama", "Kelas"],
-                    ["siswa_baru@sekolah.id", "Aris Subastian", "XII-IPA-1"]
-                ];
-            } else if(type === 'guru') {
-                data = [
-                    ["Email", "Nama", "ID_Mapel"],
-                    ["guru_baru@sekolah.id", "Hartono S.Pd", "M-01"]
-                ];
-            } else {
-                data = [["ID_Kelas", "Nama_Kelas"], ["XII-IPA-3", "XII-IPA-3"]];
-            }
-            let ws = XLSX.utils.aoa_to_sheet(data);
-            let wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-            XLSX.writeFile(wb, `Template_${type}.xlsx`);
+            if(type === 'soal') data = [["ID_Soal", "ID_Mapel", "Tipe_Soal", "Teks_Soal", "Tipe_Media", "URL_Media", "Opsi_Jawaban", "Kunci_Jawaban"], ["S-AUTO", "M-01", "PG", "Contoh?", "none", "", "A. Opsi A|B. Opsi B|C. Opsi C|D. Opsi D|E. Opsi E", "A"]];
+            else if(type === 'siswa') data = [["Email", "Nama", "Kelas"], ["siswa_baru@sekolah.id", "Aris", "XII-IPA-1"]];
+            else if(type === 'guru') data = [["Email", "Nama", "ID_Mapel"], ["guru@sekolah.id", "Hartono", "M-01"]];
+            else if(type === 'kelas') data = [["ID_Kelas", "Nama_Kelas"], ["XII-IPA-3", "XII-IPA-3"]];
+            else if(type === 'mapel') data = [["ID_Mapel", "Nama_Mapel"], ["M-03", "Kimia"]];
+
+            let ws = XLSX.utils.aoa_to_sheet(data); let wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Sheet1"); XLSX.writeFile(wb, `Template_${type}.xlsx`);
         }
 
         function handleExcelImportFlow(e, type) {
-            let file = e.target.files[0];
-            if(!file) return;
+            let file = e.target.files[0]; if(!file) return;
             let reader = new FileReader();
             reader.onload = function(evt) {
-                let data = new Uint8Array(evt.target.result);
-                let workbook = XLSX.read(data, {type: 'array'});
-                let sheet = workbook.Sheets[workbook.SheetNames[0]];
-                let rows = XLSX.utils.sheet_to_json(sheet);
-                
+                let workbook = XLSX.read(new Uint8Array(evt.target.result), {type: 'array'});
+                let rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
                 rows.forEach(r => {
-                    r.Status = "Active"; // Auto active for master imports
-                    if(type === 'soal') {
-                        r.ID_Soal = "S" + (db.Tabel_Soal.length+1).toString().padStart(3, '0');
-                        db.Tabel_Soal.push(r);
-                        if(isFirebaseConnected) firestoreDb.collection('soal').doc(r.ID_Soal).set(r);
-                    } else if(type === 'siswa') {
-                        r.Peran = 'siswa';
-                        db.Tabel_Siswa.push(r);
-                        if(isFirebaseConnected) firestoreDb.collection('users_siswa').doc(r.Email).set(r);
-                    } else if(type === 'guru') {
-                        r.Peran = 'guru';
-                        db.Tabel_Guru.push(r);
-                        if(isFirebaseConnected) firestoreDb.collection('users_guru').doc(r.Email).set(r);
-                    } else if(type === 'kelas') {
-                        db.Tabel_Kelas.push(r);
-                        if(isFirebaseConnected) firestoreDb.collection('kelas').doc(r.ID_Kelas).set(r);
-                    } else if(type === 'mapel') {
-                        db.Tabel_Mapel.push(r);
-                        if(isFirebaseConnected) firestoreDb.collection('mapel').doc(r.ID_Mapel).set(r);
-                    }
+                    r.Status = "Active";
+                    if(type === 'soal') { r.ID_Soal = "S" + (db.Tabel_Soal.length+1).toString().padStart(3, '0'); db.Tabel_Soal.push(r); if(isFirebaseConnected) firestoreDb.collection('soal').doc(r.ID_Soal).set(r); }
+                    else if(type === 'siswa') { r.Peran = 'siswa'; db.Tabel_Siswa.push(r); if(isFirebaseConnected) firestoreDb.collection('users_siswa').doc(r.Email).set(r); }
+                    else if(type === 'guru') { r.Peran = 'guru'; db.Tabel_Guru.push(r); if(isFirebaseConnected) firestoreDb.collection('users_guru').doc(r.Email).set(r); }
+                    else if(type === 'kelas') { db.Tabel_Kelas.push(r); if(isFirebaseConnected) firestoreDb.collection('kelas').doc(r.ID_Kelas).set(r); }
+                    else if(type === 'mapel') { db.Tabel_Mapel.push(r); if(isFirebaseConnected) firestoreDb.collection('mapel').doc(r.ID_Mapel).set(r); }
                 });
-                saveDatabaseToLocalStorage();
-                renderInitialDropdowns();
-                showCustomSystemDialog("Impor Berhasil", `Berhasil memuat massal data ${type} sebanyak ${rows.length} baris.`, "success", () => {
-                    if(type==='soal') triggerFilterSoalDatabase();
-                    else if(type==='siswa') viewManageSiswaPanel();
-                    else if(type==='guru') viewManageGuruPanel();
-                    else if(type==='kelas') viewManageKelasPanel();
-                    else if(type==='mapel') viewManageMapelPanel();
+                saveDatabaseToLocalStorage(); renderInitialDropdowns();
+                showCustomSystemDialog("Impor Berhasil", `${rows.length} baris data dimuat.`, "success", () => {
+                    if(type==='soal') triggerFilterSoalDatabase(); else if(type==='siswa') viewManageSiswaPanel(); else if(type==='guru') viewManageGuruPanel(); else if(type==='kelas') viewManageKelasPanel(); else if(type==='mapel') viewManageMapelPanel();
                 });
-            };
-            reader.readAsArrayBuffer(file);
+            }; reader.readAsArrayBuffer(file);
         }
 
-        // VIEW: ADMIN - MANAGE MAPEL
         function viewManageMapelPanel() {
             let canvas = document.getElementById('dash-content');
             canvas.innerHTML = `
                 <div class="mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div><h1 class="text-xl font-bold text-white">Mata Pelajaran Sekolah</h1></div>
-                    <label class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1.5"><i class="fas fa-file-excel mr-1"></i> Impor Massal<input type="file" accept=".xlsx" onchange="handleExcelImportFlow(event, 'mapel')" class="hidden"></label>
+                    <div class="flex items-center gap-2">
+                        <button onclick="downloadTemplateExcel('mapel')" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold"><i class="fas fa-download mr-1.5"></i>Template</button>
+                        <label class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1.5"><i class="fas fa-file-excel mr-1"></i> Impor Massal<input type="file" accept=".xlsx" onchange="handleExcelImportFlow(event, 'mapel')" class="hidden"></label>
+                    </div>
                 </div>
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div class="bg-slate-950 p-5 rounded-2xl border border-slate-850 h-fit">
@@ -884,29 +763,18 @@
                 </div>
             `;
         }
-        function handleSaveManualMapel(e) {
-            e.preventDefault();
-            let payload = { ID_Mapel: document.getElementById('add-mp-id').value, Nama_Mapel: document.getElementById('add-mp-nama').value };
-            db.Tabel_Mapel.push(payload); saveDatabaseToLocalStorage(); 
-            if(isFirebaseConnected) firestoreDb.collection('mapel').doc(payload.ID_Mapel).set(payload);
-            renderInitialDropdowns(); viewManageMapelPanel();
-        }
-        function deleteMapelAction(id) {
-            showCustomSystemDialog("Hapus Mapel", `Apakah Anda yakin ingin menghapus Mata Pelajaran ${id}?`, "warning", () => {
-                db.Tabel_Mapel = db.Tabel_Mapel.filter(m => m.ID_Mapel !== id);
-                saveDatabaseToLocalStorage();
-                if(isFirebaseConnected) firestoreDb.collection('mapel').doc(id).delete();
-                renderInitialDropdowns(); viewManageMapelPanel();
-            });
-        }
+        function handleSaveManualMapel(e) { e.preventDefault(); let p = { ID_Mapel: document.getElementById('add-mp-id').value, Nama_Mapel: document.getElementById('add-mp-nama').value }; db.Tabel_Mapel.push(p); saveDatabaseToLocalStorage(); if(isFirebaseConnected) firestoreDb.collection('mapel').doc(p.ID_Mapel).set(p); renderInitialDropdowns(); viewManageMapelPanel(); }
+        function deleteMapelAction(id) { showCustomSystemDialog("Hapus Mapel", `Hapus ${id}?`, "warning", () => { db.Tabel_Mapel = db.Tabel_Mapel.filter(m => m.ID_Mapel !== id); saveDatabaseToLocalStorage(); if(isFirebaseConnected) firestoreDb.collection('mapel').doc(id).delete(); renderInitialDropdowns(); viewManageMapelPanel(); }); }
 
-        // VIEW: ADMIN - MANAGE KELAS
         function viewManageKelasPanel() {
             let canvas = document.getElementById('dash-content');
             canvas.innerHTML = `
                 <div class="mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div><h1 class="text-xl font-bold text-white">Manajemen Ruang Kelas</h1></div>
-                    <label class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1.5"><i class="fas fa-file-excel mr-1"></i> Impor Massal<input type="file" accept=".xlsx" onchange="handleExcelImportFlow(event, 'kelas')" class="hidden"></label>
+                    <div class="flex items-center gap-2">
+                        <button onclick="downloadTemplateExcel('kelas')" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold"><i class="fas fa-download mr-1.5"></i>Template</button>
+                        <label class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1.5"><i class="fas fa-file-excel mr-1"></i> Impor Massal<input type="file" accept=".xlsx" onchange="handleExcelImportFlow(event, 'kelas')" class="hidden"></label>
+                    </div>
                 </div>
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div class="bg-slate-950 p-5 rounded-2xl border border-slate-850 h-fit">
@@ -923,23 +791,9 @@
                 </div>
             `;
         }
-        function handleSaveManualKelas(e) {
-            e.preventDefault();
-            let payload = { ID_Kelas: document.getElementById('add-kls-id').value, Nama_Kelas: document.getElementById('add-kls-id').value };
-            db.Tabel_Kelas.push(payload); saveDatabaseToLocalStorage(); 
-            if(isFirebaseConnected) firestoreDb.collection('kelas').doc(payload.ID_Kelas).set(payload);
-            renderInitialDropdowns(); viewManageKelasPanel();
-        }
-        function deleteKelasAction(id) {
-            showCustomSystemDialog("Hapus Kelas", `Apakah Anda yakin ingin menghapus kelas ${id}?`, "warning", () => {
-                db.Tabel_Kelas = db.Tabel_Kelas.filter(k => k.ID_Kelas !== id);
-                saveDatabaseToLocalStorage();
-                if(isFirebaseConnected) firestoreDb.collection('kelas').doc(id).delete();
-                renderInitialDropdowns(); viewManageKelasPanel();
-            });
-        }
+        function handleSaveManualKelas(e) { e.preventDefault(); let p = { ID_Kelas: document.getElementById('add-kls-id').value, Nama_Kelas: document.getElementById('add-kls-id').value }; db.Tabel_Kelas.push(p); saveDatabaseToLocalStorage(); if(isFirebaseConnected) firestoreDb.collection('kelas').doc(p.ID_Kelas).set(p); renderInitialDropdowns(); viewManageKelasPanel(); }
+        function deleteKelasAction(id) { showCustomSystemDialog("Hapus Kelas", `Hapus kelas ${id}?`, "warning", () => { db.Tabel_Kelas = db.Tabel_Kelas.filter(k => k.ID_Kelas !== id); saveDatabaseToLocalStorage(); if(isFirebaseConnected) firestoreDb.collection('kelas').doc(id).delete(); renderInitialDropdowns(); viewManageKelasPanel(); }); }
 
-        // VIEW: ADMIN - MANAGE SISWA (Passwordless Version)
         function viewManageSiswaPanel() {
             let canvas = document.getElementById('dash-content');
             canvas.innerHTML = `
@@ -968,23 +822,9 @@
                 </div>
             `;
         }
-        function handleSaveManualSiswa(e) {
-            e.preventDefault();
-            let payload = { Email: document.getElementById('add-sw-email').value, Nama: document.getElementById('add-sw-nama').value, Kelas: document.getElementById('add-sw-kls').value, Peran: "siswa", Status: "Active" };
-            db.Tabel_Siswa.push(payload); saveDatabaseToLocalStorage(); 
-            if(isFirebaseConnected) firestoreDb.collection('users_siswa').doc(payload.Email).set(payload);
-            viewManageSiswaPanel();
-        }
-        function deleteSiswaAction(email) {
-            showCustomSystemDialog("Hapus Data Siswa", `Apakah Anda yakin ingin menghapus data murid ${email}?`, "warning", () => {
-                db.Tabel_Siswa = db.Tabel_Siswa.filter(s => s.Email !== email);
-                saveDatabaseToLocalStorage();
-                if(isFirebaseConnected) firestoreDb.collection('users_siswa').doc(email).delete();
-                viewManageSiswaPanel();
-            });
-        }
+        function handleSaveManualSiswa(e) { e.preventDefault(); let p = { Email: document.getElementById('add-sw-email').value, Nama: document.getElementById('add-sw-nama').value, Kelas: document.getElementById('add-sw-kls').value, Peran: "siswa", Status: "Active" }; db.Tabel_Siswa.push(p); saveDatabaseToLocalStorage(); if(isFirebaseConnected) firestoreDb.collection('users_siswa').doc(p.Email).set(p); viewManageSiswaPanel(); }
+        function deleteSiswaAction(email) { showCustomSystemDialog("Hapus Data Siswa", `Hapus murid ${email}?`, "warning", () => { db.Tabel_Siswa = db.Tabel_Siswa.filter(s => s.Email !== email); saveDatabaseToLocalStorage(); if(isFirebaseConnected) firestoreDb.collection('users_siswa').doc(email).delete(); viewManageSiswaPanel(); }); }
 
-        // VIEW: ADMIN - MANAGE GURU (Passwordless Version)
         function viewManageGuruPanel() {
             let canvas = document.getElementById('dash-content');
             canvas.innerHTML = `
@@ -1013,23 +853,9 @@
                 </div>
             `;
         }
-        function handleSaveManualGuru(e) {
-            e.preventDefault();
-            let payload = { Email: document.getElementById('add-gr-email').value, Nama: document.getElementById('add-gr-nama').value, ID_Mapel: document.getElementById('add-gr-mp').value, Peran: "guru", Status: "Active" };
-            db.Tabel_Guru.push(payload); saveDatabaseToLocalStorage(); 
-            if(isFirebaseConnected) firestoreDb.collection('users_guru').doc(payload.Email).set(payload);
-            viewManageGuruPanel();
-        }
-        function deleteGuruAction(email) {
-            showCustomSystemDialog("Hapus Data Guru", `Apakah Anda yakin ingin menghapus data akun guru ${email}?`, "warning", () => {
-                db.Tabel_Guru = db.Tabel_Guru.filter(g => g.Email !== email);
-                saveDatabaseToLocalStorage();
-                if(isFirebaseConnected) firestoreDb.collection('users_guru').doc(email).delete();
-                viewManageGuruPanel();
-            });
-        }
+        function handleSaveManualGuru(e) { e.preventDefault(); let p = { Email: document.getElementById('add-gr-email').value, Nama: document.getElementById('add-gr-nama').value, ID_Mapel: document.getElementById('add-gr-mp').value, Peran: "guru", Status: "Active" }; db.Tabel_Guru.push(p); saveDatabaseToLocalStorage(); if(isFirebaseConnected) firestoreDb.collection('users_guru').doc(p.Email).set(p); viewManageGuruPanel(); }
+        function deleteGuruAction(email) { showCustomSystemDialog("Hapus Data Guru", `Hapus guru ${email}?`, "warning", () => { db.Tabel_Guru = db.Tabel_Guru.filter(g => g.Email !== email); saveDatabaseToLocalStorage(); if(isFirebaseConnected) firestoreDb.collection('users_guru').doc(email).delete(); viewManageGuruPanel(); }); }
 
-        // VIEW: ADMIN - MANAGE JADWAL
         function viewManageJadwalPanel() {
             let canvas = document.getElementById('dash-content');
             canvas.innerHTML = `
@@ -1055,23 +881,10 @@
                 </div>
             `;
         }
-        function handleSaveManualJadwal(e) {
-            e.preventDefault();
-            let payload = { ID_Jadwal: document.getElementById('add-jd-id').value, ID_Mapel: document.getElementById('add-jd-mp').value, ID_Kelas: document.getElementById('add-jd-kls').value, Waktu_Mulai: document.getElementById('add-jd-waktu').value, Durasi_Menit: parseInt(document.getElementById('add-jd-durasi').value), Status: "Aktif" };
-            db.Tabel_Jadwal.push(payload); saveDatabaseToLocalStorage(); 
-            if(isFirebaseConnected) firestoreDb.collection('jadwal').doc(payload.ID_Jadwal).set(payload);
-            viewManageJadwalPanel();
-        }
-        function deleteJadwalAction(id) {
-            showCustomSystemDialog("Hapus Jadwal", `Apakah Anda yakin ingin mematikan rilis jadwal sesi ${id}?`, "warning", () => {
-                db.Tabel_Jadwal = db.Tabel_Jadwal.filter(j => j.ID_Jadwal !== id);
-                saveDatabaseToLocalStorage();
-                if(isFirebaseConnected) firestoreDb.collection('jadwal').doc(id).delete();
-                viewManageJadwalPanel();
-            });
-        }
+        function handleSaveManualJadwal(e) { e.preventDefault(); let p = { ID_Jadwal: document.getElementById('add-jd-id').value, ID_Mapel: document.getElementById('add-jd-mp').value, ID_Kelas: document.getElementById('add-jd-kls').value, Waktu_Mulai: document.getElementById('add-jd-waktu').value, Durasi_Menit: parseInt(document.getElementById('add-jd-durasi').value), Status: "Aktif" }; db.Tabel_Jadwal.push(p); saveDatabaseToLocalStorage(); if(isFirebaseConnected) firestoreDb.collection('jadwal').doc(p.ID_Jadwal).set(p); viewManageJadwalPanel(); }
+        function deleteJadwalAction(id) { showCustomSystemDialog("Hapus Jadwal", `Matikan sesi ${id}?`, "warning", () => { db.Tabel_Jadwal = db.Tabel_Jadwal.filter(j => j.ID_Jadwal !== id); saveDatabaseToLocalStorage(); if(isFirebaseConnected) firestoreDb.collection('jadwal').doc(id).delete(); viewManageJadwalPanel(); }); }
 
-        // VIEW: REKAP NILAI (EXCEL & PDF INTEGRATED)
+        // VIEW: REKAP NILAI (WITH FILTERS)
         function viewRekapNilaiPanel() {
             let canvas = document.getElementById('dash-content');
             canvas.innerHTML = `
@@ -1081,45 +894,69 @@
                         <p class="text-xs text-slate-400">Ekspor berkas komprehensif nilai ujian siswa.</p>
                     </div>
                     <div class="flex items-center gap-2">
-                        <button onclick="exportToExcelAction()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md"><i class="fas fa-file-excel"></i> Unduh Excel</button>
-                        <button onclick="exportToPdfAction()" class="px-3.5 py-2 bg-red-700 hover:bg-red-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md"><i class="fas fa-file-pdf"></i> Cetak PDF Laporan</button>
+                        <button onclick="exportToExcelAction()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md"><i class="fas fa-file-excel"></i> Excel</button>
+                        <button onclick="exportToPdfAction()" class="px-3.5 py-2 bg-red-700 hover:bg-red-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md"><i class="fas fa-file-pdf"></i> PDF</button>
                     </div>
                 </div>
+
+                <div class="bg-slate-950 p-4 rounded-2xl border border-slate-850 shadow-lg grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                    <div><select id="flt-r-kelas" onchange="renderRekapTableData()" class="w-full p-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 outline-none"><option value="">Semua Kelas</option>${db.Tabel_Kelas.map(k=>`<option value="${k.ID_Kelas}">${k.ID_Kelas}</option>`).join('')}</select></div>
+                    <div><select id="flt-r-mapel" onchange="renderRekapTableData()" class="w-full p-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 outline-none"><option value="">Semua Mapel</option>${db.Tabel_Mapel.map(m=>`<option value="${m.ID_Mapel}">${m.Nama_Mapel}</option>`).join('')}</select></div>
+                    <div class="relative"><i class="fas fa-search absolute left-3 top-2.5 text-slate-500 text-xs"></i><input type="text" id="flt-r-search" oninput="renderRekapTableData()" class="w-full pl-8 pr-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 outline-none focus:border-teal-500" placeholder="Cari Nama/Email Siswa..."></div>
+                </div>
+
                 <div class="bg-slate-950 rounded-2xl border border-slate-850 overflow-hidden shadow-lg">
-                    <table class="w-full text-left text-xs"><thead class="bg-slate-900 border-b border-slate-850 text-slate-400"><tr><th class="p-3">ID Hasil</th><th class="p-3">Email Siswa</th><th class="p-3">ID Sesi</th><th class="p-3 text-center">Skor</th><th class="p-3 text-red-400">Pelanggaran</th><th class="p-3">Timestamp Selesai</th></tr></thead><tbody class="divide-y divide-slate-850 text-slate-300">
-                        ${db.Tabel_Hasil.length === 0 ? `<tr><td colspan="6" class="p-6 text-center text-slate-500 italic">Belum ada peserta didik yang men-submit ujian.</td></tr>` : 
-                        db.Tabel_Hasil.map(h => `<tr><td class="p-3 font-mono font-bold text-slate-500">${h.ID_Hasil}</td><td class="p-3 font-semibold">${h.Email}</td><td class="p-3 font-mono">${h.ID_Jadwal}</td><td class="p-3 text-center font-extrabold text-teal-400 bg-teal-950/20">${h.Skor}</td><td class="p-3 font-bold text-red-400">${h.Log_Pelanggaran} Pelanggaran</td><td class="p-3 font-mono text-slate-400">${h.Waktu_Submit}</td></tr>`).join('')}
+                    <table class="w-full text-left text-xs"><thead class="bg-slate-900 border-b border-slate-850 text-slate-400"><tr><th class="p-3">Identitas Siswa</th><th class="p-3">Sesi / Mapel / Kelas</th><th class="p-3 text-center">Skor</th><th class="p-3 text-red-400">Pelanggaran</th><th class="p-3">Waktu Selesai</th></tr></thead><tbody id="tbody-rekap" class="divide-y divide-slate-850 text-slate-300">
                     </tbody></table>
                 </div>
             `;
+            renderRekapTableData();
+        }
+
+        function renderRekapTableData() {
+            let tbody = document.getElementById('tbody-rekap');
+            let fKls = document.getElementById('flt-r-kelas').value;
+            let fMpl = document.getElementById('flt-r-mapel').value;
+            let fSrc = document.getElementById('flt-r-search').value.toLowerCase();
+
+            let joinedData = db.Tabel_Hasil.map(h => {
+                let s = db.Tabel_Siswa.find(x => x.Email === h.Email) || { Nama: 'Tidak Diketahui', Kelas: '-' };
+                let j = db.Tabel_Jadwal.find(x => x.ID_Jadwal === h.ID_Jadwal) || { ID_Mapel: '-' };
+                return { ...h, NamaSiswa: s.Nama, KelasSiswa: s.Kelas, ID_Mapel: j.ID_Mapel };
+            });
+
+            let filtered = joinedData.filter(x => 
+                (fKls === "" || x.KelasSiswa === fKls) && 
+                (fMpl === "" || x.ID_Mapel === fMpl) && 
+                (fSrc === "" || x.NamaSiswa.toLowerCase().includes(fSrc) || x.Email.toLowerCase().includes(fSrc))
+            );
+
+            if(filtered.length === 0) { tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-slate-500 italic">Tidak ada data yang sesuai filter.</td></tr>`; return; }
+
+            tbody.innerHTML = filtered.map(x => `
+                <tr class="hover:bg-slate-900 transition">
+                    <td class="p-3"><span class="block font-bold text-slate-200">${x.NamaSiswa}</span><span class="text-[10px] text-slate-400">${x.Email}</span></td>
+                    <td class="p-3 font-semibold text-slate-300">${x.ID_Mapel} <br><span class="font-normal text-[10px] text-slate-500">${x.KelasSiswa} | ${x.ID_Jadwal}</span></td>
+                    <td class="p-3 text-center font-extrabold text-teal-400 bg-teal-950/20 text-sm">${x.Skor}</td>
+                    <td class="p-3 font-bold ${x.Log_Pelanggaran > 0 ? 'text-red-400' : 'text-emerald-500'}">${x.Log_Pelanggaran === 0 ? '<i class="fas fa-check-circle"></i> Bersih' : `${x.Log_Pelanggaran} Terdeteksi`}</td>
+                    <td class="p-3 font-mono text-[10px] text-slate-500">${x.Waktu_Submit}</td>
+                </tr>
+            `).join('');
         }
 
         function exportToExcelAction() {
             if(db.Tabel_Hasil.length === 0) { showCustomSystemDialog("Gagal Ekspor", "Data masih kosong.", "error"); return; }
-            let ws = XLSX.utils.json_to_sheet(db.Tabel_Hasil);
-            let wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Rekap_Nilai");
-            XLSX.writeFile(wb, "Rekap_Nilai_Exambro_Cloud.xlsx");
+            let ws = XLSX.utils.json_to_sheet(db.Tabel_Hasil); let wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Rekap_Nilai"); XLSX.writeFile(wb, "Rekap_Nilai_Exambro_Cloud.xlsx");
         }
-
         function exportToPdfAction() {
             if(db.Tabel_Hasil.length === 0) { showCustomSystemDialog("Gagal Ekspor", "Data masih kosong.", "error"); return; }
-            const { jsPDF } = window.jspdf;
-            let doc = new jsPDF();
-            doc.setFont("Helvetica", "bold");
-            doc.setFontSize(14);
-            doc.text("LAPORAN HASIL BELAJAR SISWA - EXAMBRO CLOUD", 14, 15);
-            doc.autoTable({
-                head: [['ID', 'Email Siswa', 'ID Sesi', 'Skor', 'Status Integritas', 'Waktu']],
-                body: db.Tabel_Hasil.map(h => [h.ID_Hasil, h.Email, h.ID_Jadwal, h.Skor, `${h.Log_Pelanggaran} Pelanggaran`, h.Waktu_Submit]),
-                startY: 22,
-                headStyles: { fillColor: [0, 128, 128] }
-            });
+            const { jsPDF } = window.jspdf; let doc = new jsPDF(); doc.setFont("Helvetica", "bold"); doc.setFontSize(14); doc.text("LAPORAN HASIL BELAJAR SISWA - EXAMBRO CLOUD", 14, 15);
+            doc.autoTable({ head: [['ID', 'Email Siswa', 'ID Sesi', 'Skor', 'Pelanggaran', 'Waktu']], body: db.Tabel_Hasil.map(h => [h.ID_Hasil, h.Email, h.ID_Jadwal, h.Skor, h.Log_Pelanggaran, h.Waktu_Submit]), startY: 22, headStyles: { fillColor: [0, 128, 128] } });
             doc.save("Laporan_Nilai_Exambro.pdf");
         }
 
         // ==========================================================
-        // WORKSPACE AREA SISWA (ONE-BY-ONE PAGINATION ENGINE)
+        // WORKSPACE AREA SISWA (RESUME EXAM & AUTOSAVE)
         // ==========================================================
         function renderStudentLandingArea() {
             document.getElementById('stu-name').innerText = currentUser.Nama;
@@ -1129,14 +966,7 @@
             let relevantJadwal = db.Tabel_Jadwal.filter(j => j.ID_Kelas === currentUser.Kelas);
 
             if(relevantJadwal.length === 0) {
-                canvas.innerHTML = `
-                    <div class="text-center py-12 px-4 bg-slate-900 border border-slate-800 rounded-3xl mt-6">
-                        <i class="fas fa-calendar-times text-3xl text-slate-600 mb-3"></i>
-                        <h4 class="font-bold text-xs text-slate-300">Tidak Ada Sesi Ujian</h4>
-                        <p class="text-[10px] text-slate-500 mt-1">Saat ini belum ada sesi ujian aktif yang dijadwalkan untuk kelas ${currentUser.Kelas}.</p>
-                    </div>
-                `;
-                return;
+                canvas.innerHTML = `<div class="text-center py-12 px-4 bg-slate-900 border border-slate-800 rounded-3xl mt-6"><i class="fas fa-calendar-times text-3xl text-slate-600 mb-3"></i><h4 class="font-bold text-xs text-slate-300">Tidak Ada Sesi Ujian</h4><p class="text-[10px] text-slate-500 mt-1">Saat ini belum ada sesi aktif.</p></div>`; return;
             }
 
             canvas.innerHTML = `
@@ -1144,6 +974,19 @@
                     <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Daftar Jadwal Ujian Aktif</p>
                     ${relevantJadwal.map(j => {
                         let mapel = db.Tabel_Mapel.find(m => m.ID_Mapel === j.ID_Mapel);
+                        // Cek apakah sudah disubmit permanen
+                        let isFinished = db.Tabel_Hasil.some(h => h.Email === currentUser.Email && h.ID_Jadwal === j.ID_Jadwal);
+                        // Cek apakah ada resume session
+                        let sessionKey = `smx_resume_${currentUser.Email}_${j.ID_Jadwal}`;
+                        let hasResume = localStorage.getItem(sessionKey);
+                        
+                        let btnStatus = isFinished ? 
+                            `<button disabled class="w-full py-2.5 bg-slate-800 text-slate-500 font-bold rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-not-allowed">Sudah Dikerjakan <i class="fas fa-check"></i></button>` :
+                            (hasResume ? 
+                                `<button onclick="triggerVerificationFlow('${j.ID_Jadwal}')" class="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition">Lanjutkan Sisa Ujian <i class="fas fa-play text-[10px]"></i></button>` :
+                                `<button onclick="triggerVerificationFlow('${j.ID_Jadwal}')" class="w-full py-2.5 bg-teal-premium hover:bg-teal-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition">Mulai Ujian <i class="fas fa-play text-[10px]"></i></button>`
+                            );
+
                         return `
                             <div class="bg-slate-900 p-5 rounded-3xl border border-slate-800 shadow-lg flex flex-col justify-between items-start gap-4">
                                 <div class="w-full">
@@ -1151,7 +994,7 @@
                                     <h4 class="font-bold text-sm text-white mt-2">${mapel ? mapel.Nama_Mapel : 'Evaluasi Belajar'}</h4>
                                     <p class="text-[10px] text-slate-500 mt-1"><i class="fas fa-clock mr-1"></i>Durasi Batas: ${j.Durasi_Menit} Menit</p>
                                 </div>
-                                <button onclick="triggerVerificationFlow('${j.ID_Jadwal}')" class="w-full py-2.5 bg-teal-premium hover:bg-teal-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition">Mulai Ujian <i class="fas fa-play text-[10px]"></i></button>
+                                ${btnStatus}
                             </div>
                         `;
                     }).join('')}
@@ -1166,37 +1009,39 @@
                 <div class="bg-slate-900 p-6 rounded-3xl border border-slate-800 shadow-xl mt-6 text-center">
                     <div class="w-14 h-14 bg-amber-950/40 text-amber-500 border border-amber-800 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl"><i class="fas fa-shield-lock"></i></div>
                     <h3 class="font-bold text-slate-200 text-sm">Validasi Integritas Layar</h3>
-                    <p class="text-[10px] text-slate-400 mt-2 leading-relaxed">Sistem akan memvalidasi mode <b>Layar Penuh (Fullscreen)</b>. Pembagian layar (split screen), menekan tombol navigasi, atau pindah tab terekam sebagai kecurangan secara otomatis.</p>
-                    
-                    <div class="my-4 p-3 bg-amber-950/20 border border-amber-900/40 rounded-2xl text-left text-[10px] text-amber-300">
-                        <h4 class="font-bold mb-1"><i class="fas fa-exclamation-triangle"></i> Sanksi Pelanggaran:</h4>
-                        <p class="leading-relaxed">Setiap tindakan keluar layar dicatat. Sistem akan menutup lembar ujian paksa jika pelanggaran melebihi batas 5 kali.</p>
-                    </div>
-
-                    <button onclick="requestEnforceFullscreen()" class="w-full py-3 bg-gold-premium hover:bg-yellow-600 text-slate-950 font-extrabold rounded-2xl text-xs uppercase tracking-wider shadow-md transition">Kunci Layar & Mulai</button>
+                    <p class="text-[10px] text-slate-400 mt-2 leading-relaxed">Sistem akan memvalidasi mode <b>Layar Penuh (Fullscreen)</b>. Jawaban akan disimpan otomatis secara berkala.</p>
+                    <button onclick="requestEnforceFullscreen()" class="w-full mt-5 py-3 bg-gold-premium hover:bg-yellow-600 text-slate-950 font-extrabold rounded-2xl text-xs uppercase tracking-wider shadow-md transition">Kunci Layar & Mulai</button>
+                    <button onclick="renderStudentLandingArea()" class="mt-3 text-slate-500 hover:text-slate-300 text-[10px] font-bold uppercase transition">Batal</button>
                 </div>
             `;
         }
 
         function requestEnforceFullscreen() {
             let elem = document.documentElement;
-            if (elem.requestFullscreen) {
-                elem.requestFullscreen().then(startPaginatorExamExecution).catch(() => {
-                    showCustomSystemDialog("Akses Ditolak", "Browser menolak mode fullscreen. Pastikan perizinan aktif.", "error");
-                });
-            } else {
-                startPaginatorExamExecution();
-            }
+            if (elem.requestFullscreen) { elem.requestFullscreen().then(startPaginatorExamExecution).catch(() => { showCustomSystemDialog("Akses Ditolak", "Browser menolak mode fullscreen.", "error"); }); } 
+            else { startPaginatorExamExecution(); }
         }
 
         function startPaginatorExamExecution() {
             isExamActive = true;
-            violationCount = 0;
-            let secondsLeft = activeExam.Durasi_Menit * 60;
-            activeExam.jawabanSiswa = {};
-
             activeQuestions = db.Tabel_Soal.filter(q => q.ID_Mapel === activeExam.ID_Mapel);
-            currentQIndex = 0;
+            
+            let sessionKey = `smx_resume_${currentUser.Email}_${activeExam.ID_Jadwal}`;
+            let savedSession = localStorage.getItem(sessionKey);
+            let secondsLeft = activeExam.Durasi_Menit * 60;
+
+            // RESTORE SESSION IF EXISTS
+            if(savedSession) {
+                let parsed = JSON.parse(savedSession);
+                activeExam.jawabanSiswa = parsed.ans || {};
+                secondsLeft = parsed.time || secondsLeft;
+                violationCount = parsed.viol || 0;
+                currentQIndex = parsed.idx || 0;
+            } else {
+                activeExam.jawabanSiswa = {};
+                violationCount = 0;
+                currentQIndex = 0;
+            }
 
             renderPaginatorExamViewport();
 
@@ -1210,102 +1055,55 @@
                     let s = (secondsLeft % 60).toString().padStart(2, '0');
                     let el = document.getElementById('clock-text');
                     if(el) el.innerText = `${m}:${s}`;
+                    
+                    // AUTOSAVE SETIAP DETIK
+                    localStorage.setItem(sessionKey, JSON.stringify({
+                        ans: activeExam.jawabanSiswa,
+                        time: secondsLeft,
+                        viol: violationCount,
+                        idx: currentQIndex
+                    }));
                 }
             }, 1000);
         }
 
         function renderPaginatorExamViewport() {
             let canvas = document.getElementById('stu-content');
-            if(activeQuestions.length === 0) {
-                canvas.innerHTML = `<div class="p-4 text-center text-slate-500 text-xs">Belum ada paket soal mapel ini.</div>`;
-                return;
-            }
+            if(activeQuestions.length === 0) { canvas.innerHTML = `<div class="p-4 text-center text-slate-500 text-xs">Belum ada paket soal mapel ini.</div>`; return; }
 
             let q = activeQuestions[currentQIndex];
             let mapel = db.Tabel_Mapel.find(m => m.ID_Mapel === activeExam.ID_Mapel);
 
-            // TIMER BAR ATAS
             let htmlHeader = `
                 <div class="bg-slate-950 p-3 rounded-2xl border border-slate-850 flex items-center justify-between mb-4 shadow-md">
-                    <div>
-                        <h4 class="text-[10px] font-extrabold text-teal-400 uppercase tracking-widest truncate max-w-[150px]">${mapel ? mapel.Nama_Mapel : 'Ujian'}</h4>
-                        <p class="text-[9px] text-slate-500 mt-0.5">Soal ${currentQIndex + 1} dari ${activeQuestions.length}</p>
-                    </div>
-                    <div class="flex items-center gap-1.5 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl font-mono text-xs font-bold text-amber-400">
-                        <i class="fas fa-clock text-amber-500"></i> <span id="clock-text">--:--</span>
-                    </div>
+                    <div><h4 class="text-[10px] font-extrabold text-teal-400 uppercase tracking-widest truncate max-w-[150px]">${mapel ? mapel.Nama_Mapel : 'Ujian'}</h4><p class="text-[9px] text-slate-500 mt-0.5">Soal ${currentQIndex + 1} dari ${activeQuestions.length}</p></div>
+                    <div class="flex items-center gap-1.5 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl font-mono text-xs font-bold text-amber-400"><i class="fas fa-clock text-amber-500"></i> <span id="clock-text">--:--</span></div>
                 </div>
             `;
 
-            // RENDER MEDIA
             let htmlMedia = '';
-            if(q.Tipe_Media === 'gambar' && q.URL_Media) {
-                htmlMedia = `<img src="${q.URL_Media}" class="w-full max-h-40 object-contain rounded-2xl mb-3 border border-slate-800" alt="soal">`;
-            } else if(q.Tipe_Media === 'video' && q.URL_Media) {
-                let embed = q.URL_Media.replace("watch?v=", "embed/");
-                htmlMedia = `<div class="w-full h-36 rounded-2xl overflow-hidden mb-3 border border-slate-800"><iframe src="${embed}" class="w-full h-full" allowfullscreen></iframe></div>`;
-            }
+            if(q.Tipe_Media === 'gambar' && q.URL_Media) htmlMedia = `<img src="${q.URL_Media}" class="w-full max-h-40 object-contain rounded-2xl mb-3 border border-slate-800" alt="soal">`;
+            else if(q.Tipe_Media === 'video' && q.URL_Media) htmlMedia = `<div class="w-full h-36 rounded-2xl overflow-hidden mb-3 border border-slate-800"><iframe src="${q.URL_Media.replace("watch?v=", "embed/")}" class="w-full h-full" allowfullscreen></iframe></div>`;
 
-            // RENDER JAWABAN BERDASARKAN 8 VARIASI TIPE
             let htmlInput = '';
             let savedAns = activeExam.jawabanSiswa[q.ID_Soal] || '';
 
             if(q.Tipe_Soal === 'PG' || q.Tipe_Soal === 'PG_KOMPLEKS') {
-                let options = q.Opsi_Jawaban.split('|');
-                let isComplex = q.Tipe_Soal === 'PG_KOMPLEKS';
+                let options = q.Opsi_Jawaban.split('|'); let isComplex = q.Tipe_Soal === 'PG_KOMPLEKS';
                 htmlInput = `<div class="space-y-2">` + options.map(o => {
-                    let char = o.trim().substring(0, 1);
-                    let isChecked = isComplex ? savedAns.split(',').includes(char) : savedAns === char;
-                    return `
-                        <label class="flex items-center gap-3 p-3 bg-slate-900 border border-slate-850 rounded-2xl hover:border-teal-500/50 cursor-pointer text-xs transition">
-                            <input type="${isComplex ? 'checkbox' : 'radio'}" name="ans-${q.ID_Soal}" value="${char}" ${isChecked ? 'checked' : ''} onchange="${isComplex ? 'savePaginatorAnswerComplex()' : 'savePaginatorAnswerSingle(this.value)'}" class="w-4 h-4 text-teal-600 focus:ring-teal-500">
-                            <span>${o}</span>
-                        </label>
-                    `;
+                    let char = o.trim().substring(0, 1); let isChecked = isComplex ? savedAns.split(',').includes(char) : savedAns === char;
+                    return `<label class="flex items-center gap-3 p-3 bg-slate-900 border border-slate-850 rounded-2xl hover:border-teal-500/50 cursor-pointer text-xs transition"><input type="${isComplex ? 'checkbox' : 'radio'}" name="ans-${q.ID_Soal}" value="${char}" ${isChecked ? 'checked' : ''} onchange="${isComplex ? 'savePaginatorAnswerComplex()' : 'savePaginatorAnswerSingle(this.value)'}" class="w-4 h-4 text-teal-600 focus:ring-teal-500"><span>${o}</span></label>`;
                 }).join('') + `</div>`;
             } else if(q.Tipe_Soal === 'BENAR_SALAH') {
-                htmlInput = `
-                    <div class="flex gap-2">
-                        <button type="button" onclick="savePaginatorAnswerSingle('Benar'); renderPaginatorExamViewport()" class="flex-1 py-3 border rounded-xl font-bold text-xs ${savedAns==='Benar' ? 'bg-teal-premium border-teal-500 text-white' : 'bg-slate-900 border-slate-850 text-slate-300'}">Benar</button>
-                        <button type="button" onclick="savePaginatorAnswerSingle('Salah'); renderPaginatorExamViewport()" class="flex-1 py-3 border rounded-xl font-bold text-xs ${savedAns==='Salah' ? 'bg-teal-premium border-teal-500 text-white' : 'bg-slate-900 border-slate-850 text-slate-300'}">Salah</button>
-                    </div>
-                `;
+                htmlInput = `<div class="flex gap-2"><button type="button" onclick="savePaginatorAnswerSingle('Benar'); renderPaginatorExamViewport()" class="flex-1 py-3 border rounded-xl font-bold text-xs ${savedAns==='Benar' ? 'bg-teal-premium border-teal-500 text-white' : 'bg-slate-900 border-slate-850 text-slate-300'}">Benar</button><button type="button" onclick="savePaginatorAnswerSingle('Salah'); renderPaginatorExamViewport()" class="flex-1 py-3 border rounded-xl font-bold text-xs ${savedAns==='Salah' ? 'bg-teal-premium border-teal-500 text-white' : 'bg-slate-900 border-slate-850 text-slate-300'}">Salah</button></div>`;
             } else if(q.Tipe_Soal === 'URUTAN') {
-                let items = q.Opsi_Jawaban.split('|');
-                if(savedAns) items = savedAns.split('|');
-                htmlInput = `
-                    <div class="space-y-2 p-2 bg-slate-950 border border-slate-850 rounded-2xl" id="order-box-${q.ID_Soal}">
-                        ${items.map(it => `
-                            <div data-val="${it}" class="flex items-center justify-between p-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200">
-                                <span>${it}</span>
-                                <div class="flex gap-1">
-                                    <button onclick="moveItemUp(this); savePaginatorAnswerOrder()" class="p-1 px-2 bg-slate-800 rounded text-[10px] font-bold"><i class="fas fa-chevron-up"></i></button>
-                                    <button onclick="moveItemDown(this); savePaginatorAnswerOrder()" class="p-1 px-2 bg-slate-800 rounded text-[10px] font-bold"><i class="fas fa-chevron-down"></i></button>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                `;
+                let items = q.Opsi_Jawaban.split('|'); if(savedAns) items = savedAns.split('|');
+                htmlInput = `<div class="space-y-2 p-2 bg-slate-950 border border-slate-850 rounded-2xl" id="order-box-${q.ID_Soal}">${items.map(it => `<div data-val="${it}" class="flex items-center justify-between p-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200"><span>${it}</span><div class="flex gap-1"><button onclick="moveItemUp(this); savePaginatorAnswerOrder()" class="p-1 px-2 bg-slate-800 rounded text-[10px] font-bold"><i class="fas fa-chevron-up"></i></button><button onclick="moveItemDown(this); savePaginatorAnswerOrder()" class="p-1 px-2 bg-slate-800 rounded text-[10px] font-bold"><i class="fas fa-chevron-down"></i></button></div></div>`).join('')}</div>`;
             } else if(q.Tipe_Soal === 'JODOH') {
-                let pairs = q.Opsi_Jawaban.split(',');
-                let keysLeft = pairs.map(p => p.split(':')[0]);
-                let valuesRight = pairs.map(p => p.split(':')[1]);
+                let pairs = q.Opsi_Jawaban.split(','); let keysLeft = pairs.map(p => p.split(':')[0]); let valuesRight = pairs.map(p => p.split(':')[1]);
                 htmlInput = `<div class="space-y-2">` + keysLeft.map(kl => {
-                    let preVal = '';
-                    if(savedAns) {
-                        let fPair = savedAns.split(',').find(p => p.startsWith(kl+":"));
-                        if(fPair) preVal = fPair.split(':')[1];
-                    }
-                    return `
-                        <div class="flex items-center gap-2 bg-slate-900 p-2.5 border border-slate-850 rounded-2xl text-xs">
-                            <span class="w-1/3 font-semibold text-slate-300">${kl}</span>
-                            <i class="fas fa-arrow-right text-slate-600 text-[10px]"></i>
-                            <select onchange="savePaginatorAnswerJodoh()" data-left="${kl}" class="flex-1 p-2 bg-slate-950 border border-slate-850 rounded-xl text-xs text-teal-400 outline-none">
-                                <option value="">-- Jodohkan --</option>
-                                ${valuesRight.map(vr => `<option value="${vr}" ${preVal===vr ? 'selected':''}>${vr}</option>`).join('')}
-                            </select>
-                        </div>
-                    `;
+                    let preVal = ''; if(savedAns) { let fPair = savedAns.split(',').find(p => p.startsWith(kl+":")); if(fPair) preVal = fPair.split(':')[1]; }
+                    return `<div class="flex items-center gap-2 bg-slate-900 p-2.5 border border-slate-850 rounded-2xl text-xs"><span class="w-1/3 font-semibold text-slate-300">${kl}</span><i class="fas fa-arrow-right text-slate-600 text-[10px]"></i><select onchange="savePaginatorAnswerJodoh()" data-left="${kl}" class="flex-1 p-2 bg-slate-950 border border-slate-850 rounded-xl text-xs text-teal-400 outline-none"><option value="">-- Jodohkan --</option>${valuesRight.map(vr => `<option value="${vr}" ${preVal===vr ? 'selected':''}>${vr}</option>`).join('')}</select></div>`;
                 }).join('') + `</div>`;
             } else if(q.Tipe_Soal === 'URAIAN_SINGKAT') {
                 htmlInput = `<input type="text" value="${savedAns}" placeholder="Ketik jawaban singkat (Maks 3 Kata)" oninput="limitThreeWords(this); savePaginatorAnswerSingle(this.value)" class="w-full p-3 bg-slate-900 border border-slate-850 rounded-2xl text-xs text-slate-100 outline-none focus:border-teal-500 font-medium font-bold">`;
@@ -1316,16 +1114,11 @@
                 htmlInput = `<textarea rows="4" oninput="savePaginatorAnswerSingle(this.value)" class="w-full p-3 bg-slate-900 border border-slate-850 rounded-2xl text-xs text-slate-100 outline-none focus:border-teal-500 leading-relaxed" placeholder="Ketik esai uraian jawaban lengkap Anda disini...">${savedAns}</textarea>`;
             }
 
-            // NAVIGATOR FOOTER CONTROL
-            let isFirst = currentQIndex === 0;
-            let isLast = currentQIndex === activeQuestions.length - 1;
-
+            let isFirst = currentQIndex === 0; let isLast = currentQIndex === activeQuestions.length - 1;
             let htmlFooter = `
                 <div class="mt-6 pt-3 border-t border-slate-850 flex items-center justify-between gap-3">
                     <button onclick="navigatePaginator('prev')" ${isFirst ? 'disabled' : ''} class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl disabled:opacity-30"><i class="fas fa-chevron-left mr-1"></i>Sebelumnya</button>
-                    ${isLast ? 
-                    `<button onclick="confirmSubmitExamPaginator()" class="px-5 py-2.5 bg-teal-premium hover:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-md uppercase tracking-wider">Kirim Jawaban <i class="fas fa-paper-plane ml-1"></i></button>` : 
-                    `<button onclick="navigatePaginator('next')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl">Berikutnya <i class="fas fa-chevron-right ml-1"></i></button>`}
+                    ${isLast ? `<button onclick="confirmSubmitExamPaginator()" class="px-5 py-2.5 bg-teal-premium hover:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-md uppercase tracking-wider">Kirim Jawaban <i class="fas fa-paper-plane ml-1"></i></button>` : `<button onclick="navigatePaginator('next')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl">Berikutnya <i class="fas fa-chevron-right ml-1"></i></button>`}
                 </div>
             `;
 
@@ -1333,10 +1126,9 @@
                 <div class="flex-1 flex flex-col justify-between">
                     <div>
                         ${htmlHeader}
-                        <div class="bg-slate-900 p-5 rounded-3xl border border-slate-850 shadow-lg">
+                        <div class="bg-slate-900 p-5 rounded-3xl border border-slate-850 shadow-lg animate-fade-in">
                             ${q.Tipe_Soal !== 'RUMPANG' ? `<p class="text-xs font-bold text-slate-200 leading-relaxed mb-4 pr-10">${q.Teks_Soal}</p>` : ''}
-                            ${htmlMedia}
-                            ${htmlInput}
+                            ${htmlMedia}${htmlInput}
                         </div>
                     </div>
                     ${htmlFooter}
@@ -1344,33 +1136,10 @@
             `;
         }
 
-        function savePaginatorAnswerSingle(val) {
-            let id = activeQuestions[currentQIndex].ID_Soal;
-            activeExam.jawabanSiswa[id] = val.trim();
-        }
-
-        function savePaginatorAnswerComplex() {
-            let id = activeQuestions[currentQIndex].ID_Soal;
-            let checks = document.querySelectorAll(`input[name="ans-${id}"]:checked`);
-            activeExam.jawabanSiswa[id] = Array.from(checks).map(c => c.value).sort().join(',');
-        }
-
-        function savePaginatorAnswerOrder() {
-            let id = activeQuestions[currentQIndex].ID_Soal;
-            let items = document.querySelectorAll(`#order-box-${id} [data-val]`);
-            activeExam.jawabanSiswa[id] = Array.from(items).map(i => i.getAttribute('data-val')).join('|');
-        }
-
-        function savePaginatorAnswerJodoh() {
-            let id = activeQuestions[currentQIndex].ID_Soal;
-            let selects = document.querySelectorAll(`select[data-left]`);
-            let pairs = Array.from(selects).map(s => {
-                let L = s.getAttribute('data-left');
-                let R = s.value;
-                return R ? `${L}:${R}` : null;
-            }).filter(p => p !== null);
-            activeExam.jawabanSiswa[id] = pairs.join(',');
-        }
+        function savePaginatorAnswerSingle(val) { let id = activeQuestions[currentQIndex].ID_Soal; activeExam.jawabanSiswa[id] = val.trim(); }
+        function savePaginatorAnswerComplex() { let id = activeQuestions[currentQIndex].ID_Soal; let checks = document.querySelectorAll(`input[name="ans-${id}"]:checked`); activeExam.jawabanSiswa[id] = Array.from(checks).map(c => c.value).sort().join(','); }
+        function savePaginatorAnswerOrder() { let id = activeQuestions[currentQIndex].ID_Soal; let items = document.querySelectorAll(`#order-box-${id} [data-val]`); activeExam.jawabanSiswa[id] = Array.from(items).map(i => i.getAttribute('data-val')).join('|'); }
+        function savePaginatorAnswerJodoh() { let id = activeQuestions[currentQIndex].ID_Soal; let selects = document.querySelectorAll(`select[data-left]`); let pairs = Array.from(selects).map(s => { let L = s.getAttribute('data-left'); let R = s.value; return R ? `${L}:${R}` : null; }).filter(p => p !== null); activeExam.jawabanSiswa[id] = pairs.join(','); }
 
         function navigatePaginator(dir) {
             if(dir === 'next' && currentQIndex < activeQuestions.length - 1) currentQIndex++;
@@ -1378,54 +1147,43 @@
             renderPaginatorExamViewport();
         }
 
-        function confirmSubmitExamPaginator() {
-            showCustomSystemDialog("Kirim Ujian", "Apakah Anda yakin ingin mengakhiri sesi ujian? Jawaban akan dikunci di server permanen.", "warning", () => {
-                autoSubmitExamFlow();
-            });
-        }
+        function confirmSubmitExamPaginator() { showCustomSystemDialog("Kirim Ujian", "Akhiri ujian? Anda tidak akan dapat kembali.", "warning", () => { autoSubmitExamFlow(); }); }
 
         function autoSubmitExamFlow() {
-            isExamActive = false;
-            clearInterval(examTimerInterval);
+            isExamActive = false; clearInterval(examTimerInterval);
             if(document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+
+            // HAPUS AUTOSAVE RAM (CLEANUP)
+            localStorage.removeItem(`smx_resume_${currentUser.Email}_${activeExam.ID_Jadwal}`);
 
             let correct = 0;
             activeQuestions.forEach(q => {
-                let ans = activeExam.jawabanSiswa[q.ID_Soal] || "";
-                let key = q.Kunci_Jawaban || "";
-                if(q.Tipe_Soal !== 'ESAI') {
-                    if(ans.toLowerCase() === key.toLowerCase()) correct++;
-                }
+                let ans = activeExam.jawabanSiswa[q.ID_Soal] || ""; let key = q.Kunci_Jawaban || "";
+                if(q.Tipe_Soal !== 'ESAI') { if(ans.toLowerCase() === key.toLowerCase()) correct++; }
             });
 
             let finalScore = activeQuestions.length > 0 ? Math.round((correct / activeQuestions.length) * 100) : 0;
             
             let payload = {
                 ID_Hasil: "H" + (db.Tabel_Hasil.length + 1).toString().padStart(4, '0'),
-                Email: currentUser.Email,
-                ID_Jadwal: activeExam.ID_Jadwal,
-                Skor: finalScore,
-                Log_Pelanggaran: violationCount,
-                Waktu_Submit: new Date().toLocaleString('id-ID')
+                Email: currentUser.Email, ID_Jadwal: activeExam.ID_Jadwal, Skor: finalScore,
+                Log_Pelanggaran: violationCount, Waktu_Submit: new Date().toLocaleString('id-ID')
             };
 
-            db.Tabel_Hasil.push(payload);
-            saveDatabaseToLocalStorage();
+            db.Tabel_Hasil.push(payload); saveDatabaseToLocalStorage();
             if(isFirebaseConnected) firestoreDb.collection('hasil').doc(payload.ID_Hasil).set(payload);
 
             let canvas = document.getElementById('stu-content');
             canvas.innerHTML = `
-                <div class="bg-slate-900 p-6 rounded-3xl border border-slate-800 text-center mt-6 shadow-xl">
+                <div class="bg-slate-900 p-6 rounded-3xl border border-slate-800 text-center mt-6 shadow-xl animate-fade-in">
                     <div class="w-16 h-16 bg-teal-950/50 text-teal-400 border border-teal-800 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i class="fas fa-check-double"></i></div>
                     <h3 class="font-bold text-white text-base">Jawaban Tersimpan</h3>
-                    <p class="text-[10px] text-slate-400 mt-1 leading-relaxed">Lembar ujian Anda telah berhasil diunggah secara aman ke database server cloud.</p>
-                    
+                    <p class="text-[10px] text-slate-400 mt-1 leading-relaxed">Lembar ujian Anda telah berhasil diunggah secara permanen.</p>
                     <div class="my-5 p-4 bg-slate-950 border border-slate-850 rounded-2xl text-left space-y-2 text-xs text-slate-300">
                         <div class="flex justify-between"><span>Pelanggaran:</span><span class="font-bold text-red-400">${violationCount} Kali</span></div>
                         <div class="flex justify-between"><span>Indeks Integritas:</span><span class="font-bold text-teal-400">${violationCount === 0 ? 'SANGAT TINGGI' : 'DISIPLIN TEREKAM'}</span></div>
                     </div>
-
-                    <button onclick="handleLogout()" class="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition shadow-md">Kembali Ke Log In</button>
+                    <button onclick="renderStudentLandingArea()" class="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition shadow-md">Kembali Ke Dashboard</button>
                 </div>
             `;
         }
@@ -1438,12 +1196,7 @@
             document.addEventListener('visibilitychange', () => { if(document.hidden) triggerCheatSiren("Meminimize Aplikasi"); });
             window.addEventListener('resize', () => { if(isExamActive && !document.fullscreenElement) triggerCheatSiren("Keluar Mode Layar Penuh"); });
             document.addEventListener('contextmenu', e => e.preventDefault());
-            document.addEventListener('keydown', e => {
-                if(e.key === 'F12' || (e.ctrlKey && ['`','c','v','x','i','u','j'].includes(e.key.toLowerCase()))) {
-                    e.preventDefault();
-                    triggerCheatSiren("Pintasan Tombol Terlarang");
-                }
-            });
+            document.addEventListener('keydown', e => { if(e.key === 'F12' || (e.ctrlKey && ['`','c','v','x','i','u','j'].includes(e.key.toLowerCase()))) { e.preventDefault(); triggerCheatSiren("Pintasan Tombol Terlarang"); } });
         }
 
         function triggerCheatSiren(reason) {
@@ -1459,41 +1212,18 @@
             }
         }
 
-        // CUSTOM DIALOG OVERLAY CREATION MODULE (ANTI ALERT)
         function showCustomSystemDialog(title, msg, type = 'info', onConfirm = null) {
-            let modal = document.getElementById('custom-modal');
-            document.getElementById('modal-title').innerText = title;
-            document.getElementById('modal-message').innerText = msg;
-            
+            let modal = document.getElementById('custom-modal'); document.getElementById('modal-title').innerText = title; document.getElementById('modal-message').innerText = msg;
             let icon = document.getElementById('modal-icon');
-            icon.className = "w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 text-xl " + 
-                (type === 'error' ? 'bg-red-950/50 text-red-400 border border-red-800' : 
-                 type === 'success' ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-800' : 
-                 type === 'warning' ? 'bg-amber-950/50 text-amber-400 border border-amber-800' : 
-                 'bg-teal-950/50 text-teal-400 border border-teal-800');
+            icon.className = "w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 text-xl " + (type === 'error' ? 'bg-red-950/50 text-red-400 border border-red-800' : type === 'success' ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-800' : type === 'warning' ? 'bg-amber-950/50 text-amber-400 border border-amber-800' : 'bg-teal-950/50 text-teal-400 border border-teal-800');
             icon.innerHTML = `<i class="fas ${type === 'error' ? 'fa-circle-xmark' : type === 'success' ? 'fa-circle-check' : type === 'warning' ? 'fa-triangle-exclamation' : 'fa-circle-info'}"></i>`;
-
-            let actions = document.getElementById('modal-actions');
-            actions.innerHTML = '';
-
+            let actions = document.getElementById('modal-actions'); actions.innerHTML = '';
             if(onConfirm) {
-                let btnCancel = document.createElement('button');
-                btnCancel.className = "px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl transition";
-                btnCancel.innerText = "Batal";
-                btnCancel.onclick = () => modal.classList.add('hidden');
-                
-                let btnOk = document.createElement('button');
-                btnOk.className = "px-4 py-2 bg-teal-premium hover:bg-teal-700 text-white text-xs font-bold rounded-xl transition shadow-md";
-                btnOk.innerText = "Lanjutkan";
-                btnOk.onclick = () => { modal.classList.add('hidden'); onConfirm(); };
-                
+                let btnCancel = document.createElement('button'); btnCancel.className = "px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl transition"; btnCancel.innerText = "Batal"; btnCancel.onclick = () => modal.classList.add('hidden');
+                let btnOk = document.createElement('button'); btnOk.className = "px-4 py-2 bg-teal-premium hover:bg-teal-700 text-white text-xs font-bold rounded-xl transition shadow-md"; btnOk.innerText = "Lanjutkan"; btnOk.onclick = () => { modal.classList.add('hidden'); onConfirm(); };
                 actions.appendChild(btnCancel); actions.appendChild(btnOk);
             } else {
-                let btnOk = document.createElement('button');
-                btnOk.className = "px-6 py-2 bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-bold rounded-xl transition";
-                btnOk.innerText = "OK";
-                btnOk.onclick = () => modal.classList.add('hidden');
-                actions.appendChild(btnOk);
+                let btnOk = document.createElement('button'); btnOk.className = "px-6 py-2 bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-bold rounded-xl transition"; btnOk.innerText = "OK"; btnOk.onclick = () => modal.classList.add('hidden'); actions.appendChild(btnOk);
             }
             modal.classList.remove('hidden');
         }
@@ -1502,6 +1232,9 @@
         function moveItemUp(btn) { let item = btn.closest('[data-val]'); let prev = item.previousElementSibling; if(prev) item.parentNode.insertBefore(item, prev); }
         function moveItemDown(btn) { let item = btn.closest('[data-val]'); let next = item.nextElementSibling; if(next) item.parentNode.insertBefore(next, item); }
         function limitThreeWords(el) { let words = el.value.trim().split(/\s+/); if(words.length > 3) el.value = words.slice(0, 3).join(' '); }
+        
+        // Anti Cheat System Initiation
+        initAntiCheatSystem();
     </script>
 </body>
 </html>
