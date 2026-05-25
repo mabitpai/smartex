@@ -186,11 +186,16 @@
                 <div class="flex items-center gap-3">
                     <div class="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center"><i class="fas fa-user-graduate text-sm text-teal-400"></i></div>
                     <div>
-                        <p class="text-[10px] text-teal-400 font-bold uppercase tracking-wider">Kandidat Ujian</p>
+                        <p class="text-[10px] text-teal-400 font-bold uppercase tracking-wider">Peserta Ujian</p>
                         <h3 class="font-bold text-xs tracking-tight text-white leading-tight" id="stu-name">Nama Siswa</h3>
                     </div>
                 </div>
-                <span class="px-2.5 py-1 bg-slate-800 rounded-full text-[9px] font-bold text-gold-premium border border-slate-700 uppercase" id="stu-kelas">KELAS</span>
+                <div class="flex items-center gap-2">
+                    <span class="px-2.5 py-1 bg-slate-800 rounded-full text-[9px] font-bold text-gold-premium border border-slate-700 uppercase" id="stu-kelas">KELAS</span>
+                    <button onclick="handleLogout()" class="w-8 h-8 rounded-full bg-rose-950 hover:bg-rose-900 text-rose-400 border border-rose-800 flex items-center justify-center transition shadow-md" title="Keluar dari Aplikasi">
+                        <i class="fas fa-power-off text-[10px]"></i>
+                    </button>
+                </div>
             </header>
             <div class="flex-1 p-4 flex flex-col justify-between" id="stu-content"></div>
         </div>
@@ -198,6 +203,19 @@
 
     <!-- JAVASCRIPT GLOBAL SYSTEM ENGINE -->
     <script>
+        // =========================================================================
+        // WAJIB DIISI: GANTI KODE DI BAWAH INI DENGAN CONFIG DARI FIREBASE CONSOLE ANDA
+        // =========================================================================
+        const FIREBASE_CONFIG = {
+            apiKey: "AIzaSyBpN4_H90p0KM633c6y1G4J0VYZ0usjfJk",
+            authDomain: "smartex-998c2.firebaseapp.com",
+            projectId: "smartex-998c2",
+            storageBucket: "smartex-998c2.firebasestorage.app",
+            messagingSenderId: "240864118301",
+            appId: "1:240864118301:web:c1659b36f59d282c8b28f4"
+        };
+        // =========================================================================
+
         // Data Default/Mockup
         let db = {
             Tabel_Siswa: [{ Email: "siswa1@sekolah.id", Nama: "Rian Hidayat", Kelas: "XII-IPA-1", Peran: "siswa", Status: "Active" }],
@@ -218,7 +236,7 @@
             initDatabaseFromLocalStorage();
             renderInitialDropdowns();
             toggleRegAttributePanel();
-            autoInitializeFirebaseConfig(); // Inisialisasi Firebase & Tarik Data Sinkron
+            autoInitializeFirebaseConfig(); 
             
             // Check session login (Auto Login)
             let savedSession = localStorage.getItem('smartex_auth_session');
@@ -226,13 +244,9 @@
                 try {
                     let s = JSON.parse(savedSession);
                     document.getElementById('login-email').value = s.Email;
-                    // Beri delay 1 detik agar Firebase punya waktu sinkronisasi sebelum auto login
+                    // Delay sejenak menunggu sinkronisasi database awan
                     setTimeout(() => { handleAuthLoginFlow(new Event('submit')); }, 1000);
                 } catch(e){}
-            } else {
-                document.getElementById('status-koneksi').innerHTML = `<i class="fas fa-check-circle text-teal-500"></i> Mode Luring (Local) Aktif.`;
-                document.getElementById('status-koneksi').classList.remove('animate-pulse', 'text-amber-500');
-                document.getElementById('status-koneksi').classList.add('text-slate-400');
             }
         };
 
@@ -243,13 +257,12 @@
 
         function saveDatabaseToLocalStorage() { localStorage.setItem('fb_exambro_db', JSON.stringify(db)); }
 
-        // FUNGSI INI KINI MENARIK DATA DARI FIREBASE SECARA ASINKRON (MEMPERBAIKI BUG DATA TIDAK MUNCUL DI MURID)
+        // FUNGSI INI KINI MENGGUNAKAN KONFIGURASI HARCODED DI ATAS UNTUK MENARIK DATA SECARA GLOBAL
         async function autoInitializeFirebaseConfig() {
-            let configStr = localStorage.getItem('fb_config_json');
-            if(configStr) {
+            // Cek apakah admin sudah memasukkan API Key di baris kode atas
+            if(FIREBASE_CONFIG.apiKey !== "") {
                 try {
-                    let config = JSON.parse(configStr);
-                    if (!firebase.apps.length) firebase.initializeApp(config);
+                    if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
                     firestoreDb = firebase.firestore();
                     isFirebaseConnected = true;
                     
@@ -262,6 +275,9 @@
                     document.getElementById('status-koneksi').classList.remove('animate-pulse', 'text-amber-500');
                     document.getElementById('status-koneksi').classList.add('text-teal-400');
                 } catch(e) { console.error("Firebase startup fault: ", e); }
+            } else {
+                document.getElementById('status-koneksi').innerHTML = `<i class="fas fa-exclamation-circle text-amber-500"></i> Firebase Config Belum Diisi di Source Code!`;
+                document.getElementById('status-koneksi').classList.remove('animate-pulse');
             }
         }
 
@@ -284,7 +300,7 @@
                     }
                 }
                 saveDatabaseToLocalStorage(); // Timpa local memori
-                renderInitialDropdowns();     // Segarkan dropdown Pendaftaran
+                renderInitialDropdowns();     // Segarkan dropdown Pendaftaran di semua HP murid!
             } catch (error) {
                 console.error("Gagal sinkronisasi data dari Firebase: ", error);
             }
@@ -377,8 +393,7 @@
                     { id: 'ad-guru', name: 'Data Master Guru', icon: 'fa-user-tie', action: viewManageGuruPanel },
                     { id: 'ad-soal', name: 'Bank Soal Ujian', icon: 'fa-folder-open', action: viewManageSoalPanel },
                     { id: 'ad-jadwal', name: 'Jadwal Ujian Rilis', icon: 'fa-calendar-days', action: viewManageJadwalPanel },
-                    { id: 'ad-rekap', name: 'Laporan Rekap Nilai', icon: 'fa-file-invoice', action: viewRekapNilaiPanel },
-                    { id: 'ad-config', name: 'Konfigurator Firebase', icon: 'fa-database', action: viewFirebaseSetupPanel }
+                    { id: 'ad-rekap', name: 'Laporan Rekap Nilai', icon: 'fa-file-invoice', action: viewRekapNilaiPanel }
                 ];
             } else {
                 menus = [
@@ -443,28 +458,6 @@
                 }
                 saveDatabaseToLocalStorage(); viewApprovalWorkflowArea();
             }
-        }
-
-        // ==========================================
-        // MENU 2: SETUP FIREBASE CONFIG
-        // ==========================================
-        function viewFirebaseSetupPanel() {
-            let canvas = document.getElementById('dash-content'); let savedConfig = localStorage.getItem('fb_config_json') || '';
-            canvas.innerHTML = `
-                <div class="mb-5"><h1 class="text-xl font-bold text-slate-100">Koneksi Database Google Firebase</h1></div>
-                <div class="bg-slate-950 p-6 rounded-2xl border border-slate-850 max-w-xl shadow-lg">
-                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Masukkan Firebase Web App Config JSON</label>
-                    <textarea id="fb-config-raw" rows="8" class="w-full p-3 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono text-slate-200 outline-none focus:border-teal-500" placeholder="{\n  &quot;apiKey&quot;: &quot;AIzaSy...&quot;,\n  &quot;authDomain&quot;: &quot;proj.firebaseapp.com&quot;,\n  &quot;projectId&quot;: &quot;proj&quot;\n}">${savedConfig}</textarea>
-                    <button onclick="saveFirebaseSetupConfig()" class="mt-4 px-5 py-2.5 bg-teal-premium hover:bg-teal-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition shadow-md"><i class="fas fa-save mr-1"></i>Inisialisasi Firebase Cloud</button>
-                    <p class="text-[10px] mt-4 text-amber-500 italic"><i class="fas fa-exclamation-triangle"></i> Penting: Pastikan Rules Firestore Anda diset <b>allow read, write: if true;</b> agar murid dapat menarik data sebelum login.</p>
-                </div>
-            `;
-        }
-        function saveFirebaseSetupConfig() {
-            let raw = document.getElementById('fb-config-raw').value.trim();
-            if(!raw) { showCustomSystemDialog("Input Kosong", "Pastikan menyalin isian JSON SDK Config.", "warning"); return; }
-            try { JSON.parse(raw); localStorage.setItem('fb_config_json', raw); showCustomSystemDialog("Config Disimpan", "Melakukan sinkronisasi...", "success", () => window.location.reload()); } 
-            catch(e) { showCustomSystemDialog("JSON Invalid", "String masukan bukan objek JSON valid.", "error"); }
         }
 
         // ==========================================
